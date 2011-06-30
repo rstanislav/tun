@@ -23,11 +23,12 @@ static int pktcompl_event_handler(int fd, unsigned short flags, void *priv)
 
     p = (struct pkt *) info.ssi_ptr;
 
+
     if (p && p->compl_handler) {
         rc = aio_return(&p->aio);
         memset(&p->aio, 0, sizeof (p->aio));
-        pkt_compl_clear(p);
         pkt_complete(p, rc);
+        pkt_compl_clear(p);
     }
 
     return DISPATCH_CONTINUE;

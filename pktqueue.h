@@ -118,3 +118,8 @@ static inline void pkt_complete(struct pkt *p, size_t count)
     p->compl_handler(p, p->compl_priv, count);
 }
 
+int pkt_async_read(int fd, struct pkt *p,
+                   pktcompl_handler_t compl_handler, void *compl_priv);
+int pkt_async_write(int fd, struct pkt *p,
+                    pktcompl_handler_t compl_handler, void *compl_priv);
+
