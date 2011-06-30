@@ -12,6 +12,7 @@
 #include <sys/ioctl.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
+#include <arpa/inet.h>
 
 static void usage(char *progname)
 {
@@ -33,7 +34,7 @@ static int tun_alloc(char *ifname)
     }
 
     memset(&ifr, 0, sizeof (ifr));
-    ifr.ifr_flags = IFF_TUN;
+    ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
     strncpy(ifr.ifr_name, "tun%d", IFNAMSIZ);
 
     rc = ioctl(fd, TUNSETIFF, &ifr);
@@ -141,13 +142,17 @@ printusage:
     return -1;
 }
 
+int init_queues(size_t buff_size, int max_buffs);
+void cleanup_queues(void);
+int work(int sockfd, int tunfd);
+
 int main(int argc, char **argv)
 {
     int tunfd, sockfd;
     char if_name[IFNAMSIZ];
     int listen = 0;
     struct sockaddr_in addr;
-    int rc;
+    int rc = 0;
 
     memset(&addr, 0, sizeof (addr));
     rc = parse_opts(argc, argv, &addr, &listen);
@@ -164,6 +169,16 @@ int main(int argc, char **argv)
         return -1;
 
     fprintf(stdout, "Created tunnel device %s\n", if_name);
+
+    rc = init_queues(1500, 1024);
+    if (rc) {
+        fprintf(stdout, "Failed to create rx/tx queues.\n");
+        return -1;
+    }
+
+    rc = work(sockfd, tunfd);
+
+    cleanup_queues();
 
     close(tunfd);
     close(sockfd);
