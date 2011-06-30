@@ -142,9 +142,7 @@ printusage:
     return -1;
 }
 
-int init_queues(size_t buff_size, int max_buffs);
-void cleanup_queues(void);
-int work(int sockfd, int tunfd);
+int io_dispatch(int sockfd, int tunfd);
 
 int main(int argc, char **argv)
 {
@@ -170,15 +168,7 @@ int main(int argc, char **argv)
 
     fprintf(stdout, "Created tunnel device %s\n", if_name);
 
-    rc = init_queues(1500, 1024);
-    if (rc) {
-        fprintf(stdout, "Failed to create rx/tx queues.\n");
-        return -1;
-    }
-
-    rc = work(sockfd, tunfd);
-
-    cleanup_queues();
+    io_dispatch(tunfd, sockfd);
 
     close(tunfd);
     close(sockfd);

@@ -4,7 +4,7 @@ CFLAGS=-W -Wall
 LDFLAGS=
 
 TARGET= tun
-OBJS= queues.o tun.o
+OBJS= events.o io.o tun.o
 
 $(TARGET): $(OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^
