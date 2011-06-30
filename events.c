@@ -78,7 +78,7 @@ void dispatch_cleanup(struct dispatch *d)
 
 #define DISPATCH_MAX_EVT 32
 
-int event_dispatch(struct dispatch *d, int timeout, int oneshot)
+int event_dispatch(struct dispatch *d)
 {
     struct epoll_event evts[DISPATCH_MAX_EVT];
     int rc;
@@ -86,7 +86,7 @@ int event_dispatch(struct dispatch *d, int timeout, int oneshot)
     int cont = DISPATCH_CONTINUE;
 
     do {
-        rc = epoll_wait(d->epfd, evts, oneshot ? 1 : DISPATCH_MAX_EVT, timeout);
+        rc = epoll_wait(d->epfd, evts, DISPATCH_MAX_EVT, -1);
         if (rc == -1) {
             fprintf(stderr, "epoll_wait() failed: %s\n", strerror(errno));
             return DISPATCH_ABORT;
@@ -106,7 +106,7 @@ int event_dispatch(struct dispatch *d, int timeout, int oneshot)
                 break;
         }
 
-    } while (!oneshot && (cont == DISPATCH_CONTINUE));
+    } while (cont == DISPATCH_CONTINUE);
 
     return cont;
 }

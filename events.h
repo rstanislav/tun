@@ -36,4 +36,4 @@ struct event *event_create(struct dispatch *d, int fd, unsigned short flags,
 void event_delete(struct dispatch *d, struct event *e);
 int dispatch_init(struct dispatch *d);
 void dispatch_cleanup(struct dispatch *d);
-int event_dispatch(struct dispatch *d, int timeout, int oneshot);
+int event_dispatch(struct dispatch *d);

@@ -24,7 +24,7 @@ int io_dispatch(int tunfd, int sockfd)
 
     dispatch_init(&d);
 
-    event_dispatch(&d, -1, 0);
+    event_dispatch(&d);
 
     dispatch_cleanup(&d);
 
