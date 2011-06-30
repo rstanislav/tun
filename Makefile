@@ -1,10 +1,10 @@
 
 CC=gcc
 CFLAGS=-W -Wall
-LDFLAGS=
+LDFLAGS= -lrt
 
 TARGET= tun
-OBJS= events.o io.o tun.o
+OBJS= pktcompl.o events.o io.o tun.o
 
 $(TARGET): $(OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^
