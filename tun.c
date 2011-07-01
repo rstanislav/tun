@@ -21,33 +21,6 @@ static void usage(char *progname)
     fprintf(stderr, "\t%s -l [-option] port\n", progname);
 }
 
-static int tun_alloc(char *ifname)
-{
-    struct ifreq ifr;
-    int fd;
-    int rc;
-
-    fd = open("/dev/net/tun", O_RDWR);
-    if (fd < 0) {
-        fprintf(stderr, "Failed to open /dev/net/tun: %s\n", strerror(errno));
-        return fd;
-    }
-
-    memset(&ifr, 0, sizeof (ifr));
-    ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
-    strncpy(ifr.ifr_name, "tun%d", IFNAMSIZ);
-
-    rc = ioctl(fd, TUNSETIFF, &ifr);
-    if (rc) {
-        fprintf(stderr, "Failed to create tunnel interface: %s\n", strerror(errno));
-        return -1;
-    }
-
-    strcpy(ifname, ifr.ifr_name);
-
-    return fd;
-}
-
 static int sock_alloc(int listen, struct sockaddr_in *addr)
 {
     int fd;
@@ -142,12 +115,11 @@ printusage:
     return -1;
 }
 
-int io_dispatch(int sockfd, int tunfd);
+int io_dispatch(int sockfd);
 
 int main(int argc, char **argv)
 {
-    int tunfd, sockfd;
-    char if_name[IFNAMSIZ];
+    int sockfd;
     int listen = 0;
     struct sockaddr_in addr;
     int rc = 0;
@@ -162,15 +134,6 @@ int main(int argc, char **argv)
     if (sockfd < 0)
         return -1;
 
-    tunfd = tun_alloc(if_name);
-    if (tunfd < 0)
-        return -1;
-
-    fprintf(stdout, "Created tunnel device %s\n", if_name);
-
-    io_dispatch(tunfd, sockfd);
-
-    close(tunfd);
     close(sockfd);
 
     return 0;

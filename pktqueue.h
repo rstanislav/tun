@@ -1,3 +1,6 @@
+#ifndef PKTQUEUE_H_
+#define PKTQUEUE_H_
+
 #include <sys/queue.h>
 #include <stdlib.h>
 #include <errno.h>
@@ -16,9 +19,6 @@ typedef char lock_t[0];
 #define unlock(x)
 #endif
 
-struct pkt;
-typedef void (*pktcompl_handler_t)(struct pkt *, void *, size_t count);
-
 struct pkt
 {
     SIMPLEQ_ENTRY(pkt) link;
@@ -26,10 +26,6 @@ struct pkt
     size_t buff_size;
     size_t pkt_size;
     char *buff;
-
-    pktcompl_handler_t compl_handler;
-    void *compl_priv;
-    struct aiocb aio;
 };
 
 struct pktqueue
@@ -100,26 +96,4 @@ unlock:
     return p;
 }
 
-static inline void pkt_compl_set(struct pkt *p, pktcompl_handler_t h,
-                                 void *priv)
-{
-    p->compl_handler = h;
-    p->compl_priv = priv;
-}
-
-static inline void pkt_compl_clear(struct pkt *p)
-{
-    p->compl_handler = NULL;
-    p->compl_priv = NULL;
-}
-
-static inline void pkt_complete(struct pkt *p, size_t count)
-{
-    p->compl_handler(p, p->compl_priv, count);
-}
-
-int pkt_async_read(int fd, struct pkt *p,
-                   pktcompl_handler_t compl_handler, void *compl_priv);
-int pkt_async_write(int fd, struct pkt *p,
-                    pktcompl_handler_t compl_handler, void *compl_priv);
-
+#endif /* PKTQUEUE_H_ */

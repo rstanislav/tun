@@ -53,6 +53,30 @@ void event_delete(struct dispatch *d, struct event *e)
     free(e);
 }
 
+int event_setflags(struct dispatch *d, struct event *e, int flags)
+{
+    struct epoll_event ee;
+    int rc;
+
+    ee.data.ptr = e;
+    ee.events = 0;
+
+    if (flags & EVENT_READ)
+        ee.events |= EPOLLIN;
+    if (flags & EVENT_WRITE)
+        ee.events |= EPOLLOUT;
+    if (flags & EVENT_EDGE_TRIGGERED)
+        ee.events |= EPOLLET;
+
+    rc = epoll_ctl(d->epfd, EPOLL_CTL_MOD, e->fd, &ee);
+    if (rc == -1) {
+        fprintf(stderr, "epoll_ctl(MOD) failed: %s\n", strerror(errno));
+        return -1;
+    }
+
+    return 0;
+}
+
 int dispatch_init(struct dispatch *d)
 {
     d->epfd = epoll_create(1024);
