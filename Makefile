@@ -1,7 +1,7 @@
 
 CC=gcc
 CFLAGS=-W -Wall -g
-LDFLAGS= -lrt
+LDFLAGS=
 
 TARGET= tun
 OBJS= iface.o events.o io.o tun.o

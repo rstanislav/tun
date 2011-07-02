@@ -19,6 +19,9 @@ typedef char lock_t[0];
 #define unlock(x)
 #endif
 
+struct pkt;
+typedef void (*compl_handler_t)(struct pkt *, void *);
+
 struct pkt
 {
     SIMPLEQ_ENTRY(pkt) link;
@@ -26,6 +29,11 @@ struct pkt
     size_t buff_size;
     size_t pkt_size;
     char *buff;
+
+    struct {
+        compl_handler_t handler;
+        void *priv;
+    } compl;
 };
 
 struct pktqueue
@@ -65,6 +73,21 @@ static inline void pkt_free(struct pkt *p)
 {
     free(p->buff);
     free(p);
+}
+
+static inline void pkt_set_compl(struct pkt *p, compl_handler_t h,
+                                 void *priv)
+{
+    p->compl.handler = h;
+    p->compl.priv = priv;
+}
+
+static inline void pkt_complete(struct pkt *p)
+{
+    p->compl.handler(p, p->compl.priv);
+
+    p->compl.handler = NULL;
+    p->compl.priv = NULL;
 }
 
 static inline int pktqueue_enqueue(struct pktqueue *pq, struct pkt *p)

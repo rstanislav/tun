@@ -115,7 +115,7 @@ printusage:
     return -1;
 }
 
-int io_dispatch(int sockfd);
+int io_dispatch(int listen, int sockfd);
 
 int main(int argc, char **argv)
 {
@@ -133,6 +133,8 @@ int main(int argc, char **argv)
     sockfd = sock_alloc(listen, &addr);
     if (sockfd < 0)
         return -1;
+
+    rc = io_dispatch(listen, sockfd);
 
     close(sockfd);
 

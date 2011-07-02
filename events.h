@@ -34,9 +34,17 @@ struct dispatch
 	     (var) = (tmp),                                             \
                 (tmp) = (var) ? (var)->field.le_next : NULL)            \
 
+enum event_control
+{
+    EVTCTL_READ_STALL = 0,
+    EVTCTL_READ_RESTART,
+    EVTCTL_WRITE_STALL,
+    EVTCTL_WRITE_RESTART
+};
+
 struct event *event_create(struct dispatch *d, int fd, unsigned short flags,
                            event_handler_t handler, void *priv);
-int event_setflags(struct dispatch *d, struct event *e, int flags);
+int event_control(struct dispatch *d, struct event *e, int ctl);
 void event_delete(struct dispatch *d, struct event *e);
 int dispatch_init(struct dispatch *d);
 void dispatch_cleanup(struct dispatch *d);

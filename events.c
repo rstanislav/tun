@@ -53,19 +53,28 @@ void event_delete(struct dispatch *d, struct event *e)
     free(e);
 }
 
-int event_setflags(struct dispatch *d, struct event *e, int flags)
+int event_control(struct dispatch *d, struct event *e, int ctl)
 {
     struct epoll_event ee;
     int rc;
 
+    if (ctl == EVTCTL_READ_STALL)
+        e->flags &= ~EVENT_READ;
+    if (ctl == EVTCTL_READ_RESTART)
+        e->flags |= EVENT_READ;
+    if (ctl == EVTCTL_WRITE_STALL)
+        e->flags &= ~EVENT_WRITE;
+    if (ctl == EVTCTL_WRITE_RESTART)
+        e->flags |= EVENT_WRITE;
+
     ee.data.ptr = e;
     ee.events = 0;
 
-    if (flags & EVENT_READ)
+    if (e->flags & EVENT_READ)
         ee.events |= EPOLLIN;
-    if (flags & EVENT_WRITE)
+    if (e->flags & EVENT_WRITE)
         ee.events |= EPOLLOUT;
-    if (flags & EVENT_EDGE_TRIGGERED)
+    if (e->flags & EVENT_EDGE_TRIGGERED)
         ee.events |= EPOLLET;
 
     rc = epoll_ctl(d->epfd, EPOLL_CTL_MOD, e->fd, &ee);

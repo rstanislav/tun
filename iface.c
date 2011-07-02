@@ -22,6 +22,39 @@
 
 static LIST_HEAD(,iface) iface_list = { NULL };
 
+static int iface_event_handler(int fd, unsigned short flags, void *priv)
+{
+    struct iface *iface = priv;
+
+    if (flags & EVENT_READ) {
+        
+    }
+
+    if (flags & EVENT_WRITE) {
+
+    }
+
+    return DISPATCH_CONTINUE;
+}
+
+int iface_event_start(struct iface *iface, struct dispatch *d)
+{
+    iface->ev = event_create(d, iface->fd, EVENT_READ, iface_event_handler,
+                             iface);
+    if (!iface->ev)
+        return -1;
+
+    iface->d = d;
+
+    return 0;
+}
+
+void iface_event_stop(struct iface *iface)
+{
+    event_delete(iface->d, iface->ev);
+    iface->d = NULL;
+}
+
 static int setnonblock(int fd)
 {
     long fl;
@@ -65,7 +98,7 @@ struct iface *iface_create(struct sockaddr_in *remote,
     setnonblock(iface->fd);
 
     memset(&ifr, 0, sizeof (ifr));
-    ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
+    ifr.ifr_flags = IFF_TUN;
     strncpy(ifr.ifr_name, "tun%d", IFNAMSIZ);
 
     rc = ioctl(iface->fd, TUNSETIFF, &ifr);
