@@ -36,10 +36,10 @@ struct dispatch
 
 enum event_control
 {
-    EVTCTL_READ_STALL = 0,
-    EVTCTL_READ_RESTART,
-    EVTCTL_WRITE_STALL,
-    EVTCTL_WRITE_RESTART
+    EVCTL_READ_STALL = 0,
+    EVCTL_READ_RESTART,
+    EVCTL_WRITE_STALL,
+    EVCTL_WRITE_RESTART
 };
 
 struct event *event_create(struct dispatch *d, int fd, unsigned short flags,

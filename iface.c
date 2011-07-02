@@ -22,16 +22,60 @@
 
 static LIST_HEAD(,iface) iface_list = { NULL };
 
-static int iface_event_handler(int fd, unsigned short flags, void *priv)
+static void tx_complete(struct pkt *p, void *priv)
 {
     struct iface *iface = priv;
 
+    p->pkt_size = 0;
+    pktqueue_enqueue(&iface->tx_pool, p);
+    event_control(iface->d, iface->ev, EVCTL_READ_RESTART);
+}
+
+int iface_rx_schedule(struct iface *iface, struct pkt *p)
+{
+    int rc;
+
+    pktqueue_enqueue(&iface->rx_queue, p);
+    rc = event_control(iface->d, iface->ev, EVCTL_WRITE_RESTART);
+
+    return rc;
+}
+
+static int iface_event_handler(int fd, unsigned short flags, void *priv)
+{
+    struct iface *iface = priv;
+    struct pkt *p;
+    int rc;
+
     if (flags & EVENT_READ) {
-        
+        p = pktqueue_dequeue(&iface->tx_pool);
+        if (p) {
+            rc = read(fd, p->buff, p->buff_size);
+            if (rc <= 0)
+                fprintf(stderr, "%s: read error.\n", iface->name);
+            p->pkt_size = rc;
+            pkt_set_compl(p, tx_complete, iface);
+            iface->tx_handler(p, iface->tx_priv);
+        } else {
+            rc = event_control(iface->d, iface->ev, EVCTL_READ_STALL);
+            if (rc)
+                return DISPATCH_ABORT;
+        }
     }
 
     if (flags & EVENT_WRITE) {
+        p = pktqueue_dequeue(&iface->rx_queue);
+        if (p) {
+            rc = write(fd, p->buff, p->pkt_size);
+            if (rc - p->pkt_size)
+                fprintf(stderr, "%s: write error.\n", iface->name);
 
+            pkt_complete(p);
+        } else {
+            rc = event_control(iface->d, iface->ev, EVCTL_WRITE_STALL);
+            if (rc)
+                return DISPATCH_ABORT;
+        }
     }
 
     return DISPATCH_CONTINUE;
@@ -113,13 +157,13 @@ struct iface *iface_create(struct sockaddr_in *remote,
     memcpy(&iface->remote, remote, sizeof (*remote));
 
     pktqueue_init(&iface->rx_queue);
-    pktqueue_init(&iface->pool);
+    pktqueue_init(&iface->tx_pool);
     for (i = 0; i < pool_sz; i++) {
         struct pkt *p = pkt_alloc(buff_sz);
 
         if (!p)
             break;
-        pktqueue_enqueue(&iface->pool, p);
+        pktqueue_enqueue(&iface->tx_pool, p);
     }
     LIST_INSERT_HEAD(&iface_list, iface, link);
 
@@ -135,7 +179,7 @@ void iface_destroy(struct iface *iface)
 
     fprintf(stdout, "destroy %s\n", iface->name);
 
-    while ((p = pktqueue_dequeue(&iface->pool))) {
+    while ((p = pktqueue_dequeue(&iface->tx_pool))) {
         pkt_free(p);
     }
     while ((p = pktqueue_dequeue(&iface->rx_queue))) {

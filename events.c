@@ -57,15 +57,20 @@ int event_control(struct dispatch *d, struct event *e, int ctl)
 {
     struct epoll_event ee;
     int rc;
+    unsigned short flags = e->flags;
 
-    if (ctl == EVTCTL_READ_STALL)
-        e->flags &= ~EVENT_READ;
-    if (ctl == EVTCTL_READ_RESTART)
-        e->flags |= EVENT_READ;
-    if (ctl == EVTCTL_WRITE_STALL)
-        e->flags &= ~EVENT_WRITE;
-    if (ctl == EVTCTL_WRITE_RESTART)
-        e->flags |= EVENT_WRITE;
+    if (ctl == EVCTL_READ_STALL)
+        flags &= ~EVENT_READ;
+    if (ctl == EVCTL_READ_RESTART)
+        flags |= EVENT_READ;
+    if (ctl == EVCTL_WRITE_STALL)
+        flags &= ~EVENT_WRITE;
+    if (ctl == EVCTL_WRITE_RESTART)
+        flags |= EVENT_WRITE;
+
+    if (flags == e->flags)
+        return 0;
+    e->flags = flags;
 
     ee.data.ptr = e;
     ee.events = 0;
