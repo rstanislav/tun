@@ -115,7 +115,7 @@ printusage:
     return -1;
 }
 
-int io_dispatch(int listen, int sockfd);
+int io_dispatch(int sockfd, struct sockaddr_in *remote);
 
 int main(int argc, char **argv)
 {
@@ -134,7 +134,7 @@ int main(int argc, char **argv)
     if (sockfd < 0)
         return -1;
 
-    rc = io_dispatch(listen, sockfd);
+    rc = io_dispatch(sockfd, listen ? NULL : &addr);
 
     close(sockfd);
 

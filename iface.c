@@ -13,14 +13,11 @@
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <arpa/inet.h>
-#include <sys/queue.h>
 
 #include "events.h"
 #include "pktqueue.h"
 
 #include "iface.h"
-
-static LIST_HEAD(,iface) iface_list = { NULL };
 
 static void tx_complete(struct pkt *p, void *priv)
 {
@@ -107,22 +104,7 @@ static int setnonblock(int fd)
     return fcntl(fd, F_SETFL, fl | O_NONBLOCK);
 }
 
-struct iface *iface_lookup(struct sockaddr_in *remote)
-{
-    struct iface *iface, *ret = NULL;
-
-    LIST_FOREACH(iface, &iface_list, link) {
-        if (!memcmp(&iface->remote, remote, sizeof (*remote))) {
-            ret = iface;
-            break;
-        }
-    }
-
-    return ret;
-}
-
-struct iface *iface_create(struct sockaddr_in *remote,
-                           int pool_sz, size_t buff_sz)
+struct iface *iface_create(int pool_sz, size_t buff_sz)
 {
     struct iface *iface;
     struct ifreq ifr;
@@ -154,7 +136,6 @@ struct iface *iface_create(struct sockaddr_in *remote,
     }
 
     strcpy(iface->name, ifr.ifr_name);
-    memcpy(&iface->remote, remote, sizeof (*remote));
 
     pktqueue_init(&iface->rx_queue);
     pktqueue_init(&iface->tx_pool);
@@ -165,10 +146,8 @@ struct iface *iface_create(struct sockaddr_in *remote,
             break;
         pktqueue_enqueue(&iface->tx_pool, p);
     }
-    LIST_INSERT_HEAD(&iface_list, iface, link);
 
-    fprintf(stdout, "%s created [%s:%d]\n", iface->name,
-            inet_ntoa(remote->sin_addr), ntohs(remote->sin_port));
+    fprintf(stdout, "%s created.\n", iface->name);
 
     return iface;
 }
@@ -186,7 +165,6 @@ void iface_destroy(struct iface *iface)
         pkt_free(p);
     }
 
-    LIST_REMOVE(iface, link);
     close(iface->fd);
     free(iface);
 }

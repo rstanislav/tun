@@ -3,6 +3,7 @@
 
 #include <netinet/in.h>
 #include <sys/queue.h>
+#include <linux/if.h>
 
 #include "events.h"
 #include "pktqueue.h"
@@ -13,7 +14,6 @@ struct iface
 {
     char name[IFNAMSIZ];
     int fd;
-    struct sockaddr_in remote;
 
     struct pktqueue tx_pool;
     struct pktqueue rx_queue;
@@ -23,14 +23,10 @@ struct iface
 
     struct event *ev;
     struct dispatch *d;
-
-    LIST_ENTRY(iface) link;
 };
 
 int iface_rx_schedule(struct iface *iface, struct pkt *p);
-struct iface *iface_lookup(struct sockaddr_in *remote);
-struct iface *iface_create(struct sockaddr_in *remote,
-                           int pool_sz, size_t buff_sz);
+struct iface *iface_create(int pool_sz, size_t buff_sz);
 void iface_destroy(struct iface *iface);
 int iface_event_start(struct iface *iface, struct dispatch *d);
 void iface_event_stop(struct iface *iface);

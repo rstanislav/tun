@@ -3,6 +3,7 @@
 
 #include <sys/queue.h>
 #include <stdlib.h>
+#include <string.h>
 #include <errno.h>
 #include <aio.h>
 
@@ -19,6 +20,8 @@ typedef char lock_t[0];
 #define unlock(x)
 #endif
 
+#define PKT_INFO_SZ 40
+
 struct pkt;
 typedef void (*compl_handler_t)(struct pkt *, void *);
 
@@ -34,6 +37,8 @@ struct pkt
         compl_handler_t handler;
         void *priv;
     } compl;
+
+    void *dest;
 };
 
 struct pktqueue
@@ -117,6 +122,16 @@ static inline struct pkt *pktqueue_dequeue(struct pktqueue *pq)
 unlock:
     unlock(&pq->l);
     return p;
+}
+
+static inline void pkt_set_dest(struct pkt *p, void *dest)
+{
+    p->dest = dest;
+}
+
+static inline void *pkt_get_dest(struct pkt *p)
+{
+    return p->dest;
 }
 
 #endif /* PKTQUEUE_H_ */
