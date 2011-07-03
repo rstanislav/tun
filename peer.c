@@ -28,7 +28,8 @@ struct peer *peer_lookup(struct sockaddr_in *addr)
     return p;
 }
 
-struct peer *peer_create(struct dispatch *d, struct sockaddr_in *addr)
+struct peer *peer_create(struct dispatch *d, struct sockaddr_in *addr,
+                         tx_handler_t tx)
 {
     struct peer *p;
 
@@ -37,7 +38,8 @@ struct peer *peer_create(struct dispatch *d, struct sockaddr_in *addr)
         return NULL;
 
     p->dispatch = d;
-    p->state = PEER_STATE_UNKNOWN;
+    p->state = PEER_CONN_RESET;
+    p->tx = tx;
     memcpy(&p->addr, addr, sizeof (*addr));
     LIST_INSERT_HEAD(&peer_list, p, link);
 
@@ -83,8 +85,6 @@ close:
     return mtu;
 }
 
-void socket_tx_schedule(struct pkt *, void *);
-
 static int peer_iface_init(struct peer *p)
 {
     int mtu;
@@ -110,79 +110,80 @@ static int peer_iface_init(struct peer *p)
         return -1;
     }
     iface_event_start(p->iface, p->dispatch);
-    iface_set_tx(p->iface, socket_tx_schedule, &p->addr);
+    iface_set_tx(p->iface, p->tx, &p->addr);
 
     return 0;
 }
 
-static void hello_complete(struct pkt *pkt, void *priv)
+void peer_connect(struct peer *p)
 {
-    (void)priv;
+    p->state = PEER_CONN_REQUEST;
 
-    pkt_free(pkt);
+    handshake_init(p);
 }
 
-static int is_hello(struct pkt *pkt)
+void peer_receive(struct peer *p, struct pkt *pkt)
 {
-    if (pkt->pkt_size < 6)
-        return 0;
+    int rc;
+    struct tun_pi *hdr = (struct tun_pi *)pkt->buff;
 
-    return !strncmp(pkt->buff, "HELLO\n", 6);
-}
-
-static int is_olleh(struct pkt *pkt)
-{
-    if (pkt->pkt_size < 6)
-        return 0;
-
-    return !strncmp(pkt->buff, "OLLEH\n", 6);
-}
-
-static void hello_send(struct peer *p)
-{
-    struct pkt *pkt;
-
-    pkt = pkt_alloc(6);
-    pkt_set_compl(pkt, hello_complete, NULL);
-    pkt->pkt_size = 6;
-    strncpy(pkt->buff, "HELLO\n", 6);
-    socket_tx_schedule(pkt, &p->addr);
-}
-
-static void olleh_send(struct peer *p)
-{
-    struct pkt *pkt;
-
-    pkt = pkt_alloc(6);
-    pkt_set_compl(pkt, hello_complete, NULL);
-    pkt->pkt_size = 6;
-    strncpy(pkt->buff, "OLLEH\n", 6);
-    socket_tx_schedule(pkt, &p->addr);
-}
-
-void peer_tryconnect(struct peer *p)
-{
-
-    hello_send(p);
-    p->state = PEER_STATE_TRYCONNECT;
-}
-
-void peer_rx(struct peer *p, struct pkt *pkt)
-{
-    if (p->state == PEER_STATE_UNKNOWN) {
-        if (is_hello(pkt)) {
-            olleh_send(p);
-            peer_iface_init(p);
-            p->state = PEER_STATE_CONNECTED;
-        }
-    } else if (p->state == PEER_STATE_TRYCONNECT) {
-        if (is_olleh(pkt)) {
-            peer_iface_init(p);
-            p->state = PEER_STATE_CONNECTED;
-        } else
-            p->state = PEER_STATE_UNKNOWN;
-    } else if (p->state == PEER_STATE_CONNECTED) {
-        iface_rx_schedule(p->iface, pkt);
+    if (pkt->pkt_size < sizeof (*hdr)) {
+        fprintf(stderr, "Received packet too small.\n");
+        return;
     }
+
+    switch (ntohs(hdr->proto)) {
+        case ETH_P_IP:
+            if (p->state == PEER_CONNECTED)
+                iface_rx_schedule(p->iface, pkt);
+            else
+                fprintf(stderr, "Received IP data but connection has not been "
+                                "established yet\n");
+            break;
+
+        case 0x1337:
+            switch (p->state) {
+                case PEER_CONN_RESET:
+                    p->state = PEER_CONN_ACCEPT;
+                case PEER_CONN_ACCEPT:
+                    rc = handshake_accept(p, pkt);
+                    if (rc == -1)
+                        goto reset;
+                    if (rc == 1)
+                        goto connected;
+                    break;
+
+                case PEER_CONN_REQUEST:
+                    rc = handshake_request(p, pkt);
+                    if (rc == -1)
+                        goto reset;
+                    if (rc == 1)
+                        goto connected;
+                    break;
+
+                case PEER_CONNECTED:
+                    rc = handshake_connected(p, pkt);
+                    if (rc == -1)
+                        goto reset;
+                    break;
+
+                default:
+                    fprintf(stderr, "Bad state %d\n", p->state);
+            }
+
+        default:
+            fprintf(stderr, "Unrecognized Protocol 0x%04x\n",
+                    ntohs(hdr->proto));
+    }
+
+    return;
+
+reset:
+    handshake_reset(p);
+    p->state = PEER_CONN_RESET;
+    return;
+connected:
+    p->state = PEER_CONNECTED;
+    peer_iface_init(p);
 }
 

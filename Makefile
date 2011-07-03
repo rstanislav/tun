@@ -4,7 +4,7 @@ CFLAGS=-W -Wall -g
 LDFLAGS=
 
 TARGET= tun
-OBJS= peer.o iface.o events.o io.o tun.o
+OBJS= handshake.o peer.o iface.o events.o io.o tun.o
 
 $(TARGET): $(OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^

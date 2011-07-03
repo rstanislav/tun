@@ -29,7 +29,7 @@ static void rx_complete(struct pkt *p, void *priv)
     event_control(&evt_dispatch, socket_event, EVCTL_READ_RESTART);
 }
 
-void socket_tx_schedule(struct pkt *p, void *priv)
+static void socket_tx_schedule(struct pkt *p, void *priv)
 {
     struct sockaddr_in *dest = priv;
 
@@ -45,10 +45,10 @@ static void rx_handler(struct pkt *p, struct sockaddr_in *src)
     peer = peer_lookup(src);
 
     if (!peer && listen_mode) {
-        peer = peer_create(&evt_dispatch, src);
+        peer = peer_create(&evt_dispatch, src, socket_tx_schedule);
     }
 
-    peer_rx(peer, p);
+    peer_receive(peer, p);
 }
 
 static int socket_event_handler(int fd, unsigned short flags, void *priv)
@@ -126,10 +126,10 @@ int io_dispatch(int sockfd, struct sockaddr_in *remote)
     listen_mode = !remote;
 
     if (remote) {
-        serv = peer_create(&evt_dispatch, remote);
+        serv = peer_create(&evt_dispatch, remote, socket_tx_schedule);
         if (!serv)
             goto cleanup;
-        peer_tryconnect(serv);
+        peer_connect(serv);
     }
 
     rc = event_dispatch(&evt_dispatch);
