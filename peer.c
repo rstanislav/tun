@@ -30,7 +30,7 @@ struct peer *peer_create(struct dispatch *d, struct sockaddr_in *addr)
 
     p->dispatch = d;
     p->state = PEER_STATE_UNKNOWN;
-    memcpy(&p->addr, addr, sizeof (addr));
+    memcpy(&p->addr, addr, sizeof (*addr));
     LIST_INSERT_HEAD(&peer_list, p, link);
 
     return p;
