@@ -26,7 +26,7 @@ struct iface
 };
 
 int iface_rx_schedule(struct iface *iface, struct pkt *p);
-struct iface *iface_create(int pool_sz, size_t buff_sz);
+struct iface *iface_create(int pool_sz, size_t mtu);
 void iface_destroy(struct iface *iface);
 int iface_event_start(struct iface *iface, struct dispatch *d);
 void iface_event_stop(struct iface *iface);

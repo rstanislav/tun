@@ -18,7 +18,7 @@ static struct dispatch evt_dispatch;
 static struct event *socket_event;
 
 #define PKT_POOL_SZ 1024
-#define PKT_BUFF_SZ 1500
+#define PKT_BUFF_SZ 1600
 
 static void rx_complete(struct pkt *p, void *priv)
 {

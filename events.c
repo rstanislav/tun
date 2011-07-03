@@ -139,6 +139,11 @@ int event_dispatch(struct dispatch *d)
             if (evts[i].events & EPOLLOUT)
                 flags |= EVENT_WRITE;
 
+            if (evts[i].events & EPOLLERR) {
+                fprintf(stderr, "socket error.\n");
+                return DISPATCH_ABORT;
+            }
+
             cont = e->handler(e->fd, flags, e->priv);
             if (cont != DISPATCH_CONTINUE)
                 break;

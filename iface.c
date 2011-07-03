@@ -104,7 +104,29 @@ static int setnonblock(int fd)
     return fcntl(fd, F_SETFL, fl | O_NONBLOCK);
 }
 
-struct iface *iface_create(int pool_sz, size_t buff_sz)
+static void set_mtu(struct ifreq *ifr, int mtu)
+{
+    int sock;
+    int rc;
+
+    sock = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sock < 0) {
+        fprintf(stderr, "socket(): %s\n", strerror(errno));
+        return;
+    }
+
+    ifr->ifr_flags = 0;
+    ifr->ifr_mtu = mtu;
+    rc = ioctl(sock, SIOCSIFMTU, ifr);
+    if (rc) {
+        fprintf(stderr, "Failed to set MTU on %s: %s\n", ifr->ifr_name,
+                strerror(errno));
+    }
+
+    close(sock);
+}
+
+struct iface *iface_create(int pool_sz, size_t mtu)
 {
     struct iface *iface;
     struct ifreq ifr;
@@ -129,7 +151,8 @@ struct iface *iface_create(int pool_sz, size_t buff_sz)
 
     rc = ioctl(iface->fd, TUNSETIFF, &ifr);
     if (rc) {
-        fprintf(stderr, "Failed to create tunnel interface: %s\n", strerror(errno));
+        fprintf(stderr, "Failed to create tunnel interface: %s\n",
+                strerror(errno));
         close(iface->fd);
         free(iface);
         return NULL;
@@ -137,10 +160,12 @@ struct iface *iface_create(int pool_sz, size_t buff_sz)
 
     strcpy(iface->name, ifr.ifr_name);
 
+    set_mtu(&ifr, mtu);
+
     pktqueue_init(&iface->rx_queue);
     pktqueue_init(&iface->tx_pool);
     for (i = 0; i < pool_sz; i++) {
-        struct pkt *p = pkt_alloc(buff_sz);
+        struct pkt *p = pkt_alloc(mtu);
 
         if (!p)
             break;
