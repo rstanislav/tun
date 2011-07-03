@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <linux/if_tun.h>
+#include <linux/if_ether.h>
 
 #include "pktqueue.h"
 #include "events.h"
@@ -57,27 +58,24 @@ void peer_destroy(struct peer *p)
 static int mtu_discover(struct sockaddr_in *addr)
 {
     int sock;
-    int mtu;
+    int mtu = ETH_DATA_LEN;
     int rc;
     socklen_t len = sizeof (mtu);
 
     /* HACK: To discover MTU, Create and connect back a socket to the host */
     sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0)
-        return 1500;
+        return mtu;
     rc = connect(sock, (struct sockaddr *) addr, sizeof (*addr));
     if (rc) {
         fprintf(stderr, "%s: connect() failed: %s\n", __func__,
                 strerror(errno));
-        mtu = 1500;
         goto close;
     }
 
     rc = getsockopt(sock, IPPROTO_IP, IP_MTU, &mtu, &len);
-    if (rc) {
+    if (rc)
         fprintf(stderr, "Error Getting MTU: %s\n", strerror(errno));
-        mtu = 1500;
-    }
 
 close:
     close(sock);
@@ -92,11 +90,19 @@ static int peer_iface_init(struct peer *p)
     int mtu;
 
     /*
-     * Reuse MTU value minus the distance between Transport IP header and
-     * encapsulated IP header.
+     * Transport frame layout:
+     *
+     *                 <----------         Link MTU          ---------->
+     *     <| Ethernet | IP | UDP | Tun PI |          Payload          |>
+     *
+     * Encapsulated frame layout:
+     *                                    <| IP |         Data         |>
+     *                                     <-------  Tunnel MTU ------->
+     *
+     * Tunnel MTU = Link MTU - (IP header size + UDP header size + Tun PI size)
+     *            = Link MTU - 32
      */
-    mtu = mtu_discover(&p->addr) -
-        (8 + sizeof (struct tun_pi));
+    mtu = mtu_discover(&p->addr) - 32;
 
     p->iface = iface_create(1024, mtu);
     if (!p->iface) {

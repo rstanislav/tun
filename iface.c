@@ -165,7 +165,7 @@ struct iface *iface_create(int pool_sz, size_t mtu)
     pktqueue_init(&iface->rx_queue);
     pktqueue_init(&iface->tx_pool);
     for (i = 0; i < pool_sz; i++) {
-        struct pkt *p = pkt_alloc(mtu);
+        struct pkt *p = pkt_alloc(mtu + sizeof (struct tun_pi));
 
         if (!p)
             break;
