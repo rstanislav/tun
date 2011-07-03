@@ -126,6 +126,8 @@ int event_dispatch(struct dispatch *d)
     do {
         rc = epoll_wait(d->epfd, evts, DISPATCH_MAX_EVT, -1);
         if (rc == -1) {
+            if (errno == EINTR)
+                continue;
             fprintf(stderr, "epoll_wait() failed: %s\n", strerror(errno));
             return DISPATCH_ABORT;
         }
