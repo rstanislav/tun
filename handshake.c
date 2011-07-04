@@ -4,6 +4,49 @@
 
 #include "peer.h"
 
+/*
+ * Crytographic handshake sketch:
+ *
+ *
+ *
+ * (CONN_RESET)                                     (CONN_RESET)
+ * (CONN_REQUEST)
+ *         h = hash(passwd)
+ *                           pubA + h
+ *                 A -----------------------> B
+ *
+ *                                                  (CONN_ACCEPT)
+ *                                       check_id(pubA,h)
+ *
+ *                         pubB
+ *                 A <----------------------- B
+ *
+ *         accept(pubB)
+ *         a = rand()
+ *         ca = encrypt(pubB,a)
+ *         sa = sign(privA,a)
+ *
+ *                            ca + sa
+ *                 A -----------------------> B
+ *
+ *                                   a = decrypt(privB,ca)
+ *                                       verify(pubA,sa,a)
+ *                                              b = rand()
+ *                                    cb = encrypt(pubA,b)
+ *                                      sb = sign(privB,b)
+ *                                             key = a ^ b
+ *                                                     (CONNECTED)
+ *
+ *                            cb + sb
+ *                 A <----------------------- B
+ *
+ *         b = decrypt(privA,cb)
+ *         verify(pubB,b)
+ *         key = a ^ b
+ * (CONNECTED)
+ *
+ */
+
 static void handshake_pkt_complete(struct pkt *pkt, void *priv)
 {
     (void)priv;
