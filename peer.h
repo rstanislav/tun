@@ -16,6 +16,22 @@ enum peer_state
     PEER_CONNECTED
 };
 
+static inline const char *peer_state_str(enum peer_state state)
+{
+    switch (state) {
+        case PEER_CONN_RESET:
+            return "PEER_CONN_RESET";
+        case PEER_CONN_REQUEST:
+            return "PEER_CONN_REQUEST";
+        case PEER_CONN_ACCEPT:
+            return "PEER_CONN_ACCEPT";
+        case PEER_CONNECTED:
+            return "PEER_CONNECTED";
+    }
+
+    return 0;
+}
+
 struct peer
 {
     LIST_ENTRY(peer) link;

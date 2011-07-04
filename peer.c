@@ -2,6 +2,8 @@
 #include <unistd.h>
 #include <linux/if_tun.h>
 #include <linux/if_ether.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
 
 #include "pktqueue.h"
 #include "events.h"
@@ -122,6 +124,19 @@ void peer_connect(struct peer *p)
     handshake_init(p);
 }
 
+
+
+static void peer_set_state(struct peer *p, int state)
+{
+    fprintf(stdout, "[%s:%d]: %s -> %s\n",
+            inet_ntoa(p->addr.sin_addr),
+            ntohs(p->addr.sin_port),
+            peer_state_str(p->state),
+            peer_state_str(state));
+
+    p->state = state;
+}
+
 void peer_receive(struct peer *p, struct pkt *pkt)
 {
     int rc;
@@ -144,7 +159,7 @@ void peer_receive(struct peer *p, struct pkt *pkt)
         case 0x1337:
             switch (p->state) {
                 case PEER_CONN_RESET:
-                    p->state = PEER_CONN_ACCEPT;
+                    peer_set_state(p, PEER_CONN_ACCEPT);
                 case PEER_CONN_ACCEPT:
                     rc = handshake_accept(p, pkt);
                     if (rc == -1)
@@ -180,10 +195,10 @@ void peer_receive(struct peer *p, struct pkt *pkt)
 
 reset:
     handshake_reset(p);
-    p->state = PEER_CONN_RESET;
+    peer_set_state(p, PEER_CONN_RESET);
     return;
 connected:
-    p->state = PEER_CONNECTED;
+    peer_set_state(p, PEER_CONNECTED);
     peer_iface_init(p);
 }
 
