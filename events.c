@@ -25,8 +25,8 @@ struct event *event_create(struct dispatch *d, int fd, unsigned short flags,
     e->fd = fd;
     LIST_INSERT_HEAD(&d->handlers, e, link);
 
+    memset(&ee, 0, sizeof (ee));
     ee.data.ptr = e;
-    ee.events = 0;
 
     if (flags & EVENT_READ)
         ee.events |= EPOLLIN;
@@ -72,8 +72,8 @@ int event_control(struct dispatch *d, struct event *e, int ctl)
         return 0;
     e->flags = flags;
 
+    memset(&ee, 0, sizeof (ee));
     ee.data.ptr = e;
-    ee.events = 0;
 
     if (e->flags & EVENT_READ)
         ee.events |= EPOLLIN;

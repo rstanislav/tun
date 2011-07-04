@@ -89,10 +89,14 @@ static inline void pkt_set_compl(struct pkt *p, compl_handler_t h,
 
 static inline void pkt_complete(struct pkt *p)
 {
-    p->compl.handler(p, p->compl.priv);
+    compl_handler_t h = p->compl.handler;
+    void *priv = p->compl.priv;
 
     p->compl.handler = NULL;
     p->compl.priv = NULL;
+
+    if (h)
+        h(p, priv);
 }
 
 static inline int pktqueue_enqueue(struct pktqueue *pq, struct pkt *p)

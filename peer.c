@@ -39,6 +39,10 @@ struct peer *peer_create(struct dispatch *d, struct sockaddr_in *addr,
     if (!p)
         return NULL;
 
+    fprintf(stdout, "New peer [%s:%d]\n",
+            inet_ntoa(addr->sin_addr),
+            ntohs(addr->sin_port));
+
     p->dispatch = d;
     p->state = PEER_CONN_RESET;
     p->tx = tx;
@@ -50,6 +54,10 @@ struct peer *peer_create(struct dispatch *d, struct sockaddr_in *addr,
 
 void peer_destroy(struct peer *p)
 {
+    fprintf(stdout, "Destroy peer [%s:%d]\n",
+            inet_ntoa(p->addr.sin_addr),
+            ntohs(p->addr.sin_port));
+
     if (p->iface) {
         iface_event_stop(p->iface);
         iface_destroy(p->iface);
@@ -117,24 +125,22 @@ static int peer_iface_init(struct peer *p)
     return 0;
 }
 
-void peer_connect(struct peer *p)
-{
-    p->state = PEER_CONN_REQUEST;
-
-    handshake_init(p);
-}
-
-
-
 static void peer_set_state(struct peer *p, int state)
 {
-    fprintf(stdout, "[%s:%d]: %s -> %s\n",
+    fprintf(stdout, "Peer state change [%s:%d]: %s -> %s\n",
             inet_ntoa(p->addr.sin_addr),
             ntohs(p->addr.sin_port),
             peer_state_str(p->state),
             peer_state_str(state));
 
     p->state = state;
+}
+
+void peer_connect(struct peer *p)
+{
+    peer_set_state(p, PEER_CONN_REQUEST);
+
+    handshake_init(p);
 }
 
 void peer_receive(struct peer *p, struct pkt *pkt)
@@ -151,9 +157,12 @@ void peer_receive(struct peer *p, struct pkt *pkt)
         case ETH_P_IP:
             if (p->state == PEER_CONNECTED)
                 iface_rx_schedule(p->iface, pkt);
-            else
-                fprintf(stderr, "Received IP data but connection has not been "
-                                "established yet\n");
+            else {
+                fprintf(stdout, "Protocol error [%s:%d]: Uninitialized connection.\n",
+                        inet_ntoa(p->addr.sin_addr),
+                        ntohs(p->addr.sin_port));
+                goto reset;
+            }
             break;
 
         case 0x1337:
