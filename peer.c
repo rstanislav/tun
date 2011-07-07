@@ -165,7 +165,7 @@ void peer_receive(struct peer *p, struct pkt *pkt)
             }
             break;
 
-        case 0x1337:
+        case TUN_PROTO_ID:
             switch (p->state) {
                 case PEER_CONN_RESET:
                     peer_set_state(p, PEER_CONN_ACCEPT);

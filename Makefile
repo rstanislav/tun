@@ -1,34 +1,53 @@
 CC=gcc
 CFLAGS=-W -Wall -g
 
-TUN_LDFLAGS=
-TUN_CFLAGS=
 TUN=tun
-TUN_OBJS= handshake.o peer.o iface.o events.o io.o tun.o
+TUN_OBJS=crypto.o handshake.o peer.o iface.o events.o io.o tun.o
+TUN_CFLAGS=
+TUN_LDFLAGS=-lcrypto
 
-all: .deps.mk $(TUN)
+GENKEY=generate_keypair
+GENKEY_OBJS=crypto.o generate_keypair.o
+GENKEY_CFLAGS=
+GENKEY_LDFLAGS=-lcrypto
+
+all: $(TUN)
 
 $(TUN): $(TUN_OBJS)
-	@echo -e "  [LD] $@"
+	@echo "  [LD] $@"
 	@$(CC) $(TUN_LDFLAGS) -o $@ $^
 $(TUN_OBJS): CFLAGS := $(CFLAGS) $(TUN_CFLAGS)
 
-.PHONY = deps clean distclean
+$(GENKEY): $(GENKEY_OBJS)
+	@echo "  [LD] $@"
+	@$(CC) $(GENKEY_LDFLAGS) -o $@ $^
+$(GENKEY_OBJS): CFLAGS := $(CFLAGS) $(GENKEY_CFLAGS)
 
--include .deps.mk
+.PHONY = all clean distclean
 
-.deps.mk deps:
-	@echo -e "  [DEPS] .deps.mk"
-	@$(CC) -MM $(TUN_CFLAGS) $(TUN_OBJS:.o=.c) > .deps.mk
+handshake.o: priv.key
+
+.deps.mk:
+	@echo "  [DEPS] $@"
+	@$(CC) -MM -DGEN_DEPS $(TUN_CFLAGS) $(TUN_OBJS:.o=.c) > $@
+	@$(CC) -MM -DGEN_DEPS $(GENKEY_CFLAGS) $(GENKEY_OBJS:.o=.c) >> $@
+
+priv.key: $(GENKEY)
+	@echo "  [GENKEY] priv.key"
+	@./$(GENKEY) > priv.key
 
 clean:
 	rm -f $(TUN) $(TUN_OBJS)
+	rm -f $(GENKEY) $(GENKEY_OBJS)
 
 distclean:
 	rm -f $(TUN) $(TUN_OBJS)
+	rm -f $(GENKEY) $(GENKEY_OBJS)
+	rm -f priv.key
 	rm -f .deps.mk
     
 %.o: %.c
-	@echo -e "  [CC] $@"
+	@echo "  [CC] $@"
 	@$(CC) $(CFLAGS) -c $<
 
+-include .deps.mk

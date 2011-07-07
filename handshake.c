@@ -3,22 +3,34 @@
 #include <stdio.h>
 
 #include "peer.h"
+#include "crypto.h"
+
+#ifndef GEN_DEPS
+static const struct
+{
+    struct keyhdr hdr;
+    unsigned char data[];
+} binkey = {
+#include "priv.key"
+};
+#endif
+
+static RSA *privkey = NULL;
 
 /*
  * Crytographic handshake sketch:
  *
+ *    TODO: Add some form of authentification.
  *
  *
  * (CONN_RESET)                                     (CONN_RESET)
  * (CONN_REQUEST)
- *         h = hash(passwd)
- *                           pubA + h
+ *                             pubA
  *                 A -----------------------> B
  *
  *                                                  (CONN_ACCEPT)
- *                                       check_id(pubA,h)
  *
- *                         pubB
+ *                             pubB
  *                 A <----------------------- B
  *
  *         accept(pubB)
@@ -54,48 +66,56 @@ static void handshake_pkt_complete(struct pkt *pkt, void *priv)
     pkt_free(pkt);
 }
 
-static struct pkt *handshake_pkt_build(void *data, size_t size)
+static void handshake_send_pub(struct peer *p)
 {
     struct pkt *pkt;
     struct tun_pi *hdr;
+    struct pubhdr *pubhdr;
 
-    pkt = pkt_alloc(size + sizeof (struct tun_pi));
+    pkt = pkt_alloc(sizeof (struct tun_pi) +
+                    sizeof (struct pubhdr) +
+                    crypto_pub_len(privkey));
     if (!pkt)
-        return NULL;
-    pkt->pkt_size = size + sizeof (struct tun_pi);
+        return;
     hdr = (struct tun_pi *)pkt->buff;
-    hdr->proto = htons(0x1337);
-    memcpy(hdr + 1, data, size);
+    pubhdr = (struct pubhdr *)(hdr + 1);
+    hdr->proto = htons(TUN_PROTO_ID);
+    pkt->pkt_size = sizeof (struct tun_pi);
+    pkt->pkt_size += crypto_pack_pub(privkey, pubhdr,
+                                     (void *)(pubhdr + 1),
+                                     pkt->buff_size - pkt->pkt_size);
     pkt_set_compl(pkt, handshake_pkt_complete, NULL);
 
-    return pkt;
+    peer_send(p, pkt);
 }
 
 void handshake_init(struct peer *p)
 {
-    struct pkt *pkt;
+    if (privkey == NULL)
+        privkey = crypto_unpack_key(&binkey.hdr, binkey.data);
 
-    pkt = handshake_pkt_build("HELLO", 5);
-    peer_send(p, pkt);
+    handshake_send_pub(p);
 }
 
 void handshake_reset(struct peer *p)
 {
-    struct pkt *pkt;
-
-    pkt = handshake_pkt_build("RESET", 5);
-    peer_send(p, pkt);
+    (void)p;
 }
 
 int handshake_accept(struct peer *p, struct pkt *pkt)
 {
     struct tun_pi *hdr = (struct tun_pi *)pkt->buff;
 
-    if ((pkt->pkt_size - sizeof (*hdr) >= 5) &&
-        !memcmp(hdr + 1, "HELLO", 5)) {
+    if (privkey == NULL)
+        privkey = crypto_unpack_key(&binkey.hdr, binkey.data);
 
-        pkt = handshake_pkt_build("HELLO", 5);
-        peer_send(p, pkt);
+    if (!p->pubkey) {
+        struct pubhdr *phdr = (struct pubhdr *)(hdr + 1);
+        unsigned char *data = (void *)(phdr + 1);
+
+        p->pubkey = crypto_unpack_pub(phdr, data);
+
+        handshake_send_pub(p);
 
         return 1;
     }
@@ -107,10 +127,11 @@ int handshake_request(struct peer *p, struct pkt *pkt)
 {
     struct tun_pi *hdr = (struct tun_pi *)pkt->buff;
 
-    (void)p;
+    if (!p->pubkey) {
+        struct pubhdr *phdr = (struct pubhdr *)(hdr + 1);
+        unsigned char *data = (void *)(phdr + 1);
 
-    if ((pkt->pkt_size - sizeof (*hdr) >= 5) &&
-        !memcmp(hdr + 1, "HELLO", 5)) {
+        p->pubkey = crypto_unpack_pub(phdr, data);
 
         return 1;
     }
@@ -123,14 +144,7 @@ int handshake_connected(struct peer *p, struct pkt *pkt)
     struct tun_pi *hdr = (struct tun_pi *)pkt->buff;
 
     (void)p;
-
-    if ((pkt->pkt_size - sizeof (*hdr) >= 5) &&
-        !memcmp(hdr + 1, "RESET", 5)) {
-
-        return -1;
-    }
-
-    fprintf(stderr, "Unknown protocol message received while connected\n");
+    (void)hdr;
 
     return 0;
 }

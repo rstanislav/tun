@@ -3,21 +3,39 @@
 
 #include <openssl/rsa.h>
 
-struct keypair
+struct keyhdr
 {
-    struct pubkey
-    {
-        unsigned char n[256];
-        unsigned char e[4];
-    } pub;
-    unsigned char d[256];
-    unsigned char p[128];
-    unsigned char q[128];
-    unsigned char dmp1[128];
-    unsigned char dmq1[128];
-    unsigned char iqmp[128];
+    unsigned short nlen;
+    unsigned short elen;
+    unsigned short dlen;
+    unsigned short plen;
+    unsigned short qlen;
+    unsigned short dmp1len;
+    unsigned short dmq1len;
+    unsigned short iqmplen;
 };
 
-int crypto_pack_key(RSA *r, struct keypair *kp);
+struct pubhdr
+{
+    unsigned short nlen;
+    unsigned short elen;
+};
+
+size_t crypto_key_len(RSA *r);
+int crypto_pack_key(RSA *r,
+                    struct keyhdr *h,
+                    unsigned char *data,
+                    size_t len);
+RSA *crypto_unpack_key(const struct keyhdr *h,
+                       const unsigned char *data);
+size_t crypto_pub_len(RSA *r);
+int crypto_pack_pub(RSA *r,
+                    struct pubhdr *h,
+                    unsigned char *data,
+                    size_t len);
+RSA *crypto_unpack_pub(const struct pubhdr *h,
+                       const unsigned char *data);
+
+
 
 #endif

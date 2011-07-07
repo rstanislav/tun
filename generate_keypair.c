@@ -6,55 +6,50 @@
 
 #include "crypto.h"
 
-static void printbuff(const unsigned char *b, size_t l)
-{
-    size_t i;
-
-    fprintf(stdout, "{ ");
-
-    if (l) {
-        for (i = 0; i < l - 1; i++) {
-            fprintf(stdout, "0x%02x, ", b[i]);
-        }
-        fprintf(stdout, "0x%02x", b[l - 1]);
-    }
-
-    fprintf(stdout, "}");
-}
-
 int main(void)
 {
     int rc;
     RSA *r;
-    struct keypair kp;
+    struct keyhdr h;
+    unsigned char buff[2048];
+    int i = 0;
 
-    r = RSA_generate_key(2048, 17, NULL, NULL);
+    r = RSA_generate_key(2048, 65537, NULL, NULL);
     if (!r) {
         fprintf(stderr, "Key generation failed\n");
         return 1;
     }
 
-    rc = crypto_pack_key(r, &kp);
+    rc = crypto_pack_key(r, &h, buff, 2048);
     RSA_free(r);
-    if (!rc) {
+    if (rc == -1) {
         fprintf(stderr, "Failed to pack key\n");
         return 1;
     }
 
-    fprintf(stdout, "const struct keypair KEYPAIR = {\n");
-    fprintf(stdout, "    {\n      ");
-    printbuff(kp.pub.n, sizeof (kp.pub.n)); fprintf(stdout, ",\n      ");
-    printbuff(kp.pub.e, sizeof (kp.pub.e)); fprintf(stdout, "\n");
-    fprintf(stdout, "    },\n    ");
-    printbuff(kp.d, sizeof (kp.d)); fprintf(stdout, ",\n    ");
-    printbuff(kp.p, sizeof (kp.p)); fprintf(stdout, ",\n    ");
-    printbuff(kp.q, sizeof (kp.q)); fprintf(stdout, ",\n    ");
-    printbuff(kp.dmp1, sizeof (kp.dmp1)); fprintf(stdout, ",\n    ");
-    printbuff(kp.dmq1, sizeof (kp.dmq1)); fprintf(stdout, ",\n    ");
-    printbuff(kp.iqmp, sizeof (kp.iqmp)); fprintf(stdout, "\n");
-    fprintf(stdout, "};\n");
+    fprintf(stdout, "{\n");
+    fprintf(stdout, "  .nlen = %d,\n", h.nlen);
+    fprintf(stdout, "  .elen = %d,\n", h.elen);
+    fprintf(stdout, "  .dlen = %d,\n", h.dlen);
+    fprintf(stdout, "  .plen = %d,\n", h.plen);
+    fprintf(stdout, "  .qlen = %d,\n", h.qlen);
+    fprintf(stdout, "  .dmp1len = %d,\n", h.dmp1len);
+    fprintf(stdout, "  .dmq1len = %d,\n", h.dmq1len);
+    fprintf(stdout, "  .iqmplen = %d\n", h.iqmplen);
+    fprintf(stdout, "},\n");
 
-    memset(&kp, 0, sizeof (kp));
+    fprintf(stdout, "{\n");
+    if (rc)
+        fprintf(stdout, "  0x%02x", buff[i++]);
+    while (i < rc) {
+        if (i % 16)
+            fprintf(stdout, ", 0x%02x", buff[i++]);
+        else
+            fprintf(stdout, ",\n  0x%02x", buff[i++]);
+    }
+    fprintf(stdout, "\n}\n");
+
+    memset(buff, 0, sizeof (buff));
     return 0;
 }
 

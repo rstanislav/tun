@@ -7,6 +7,9 @@
 #include <linux/if_ether.h>
 
 #include "iface.h"
+#include "crypto.h"
+
+#define TUN_PROTO_ID 0
 
 enum peer_state
 {
@@ -40,6 +43,7 @@ struct peer
     struct sockaddr_in addr;
     struct iface *iface;
     struct dispatch *dispatch;
+    RSA *pubkey;
 
     tx_handler_t tx;
 };
