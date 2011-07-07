@@ -116,6 +116,7 @@ printusage:
 }
 
 int io_dispatch(int sockfd, struct sockaddr_in *remote);
+void crypto_init(void);
 
 int main(int argc, char **argv)
 {
@@ -133,6 +134,8 @@ int main(int argc, char **argv)
     sockfd = sock_alloc(listen, &addr);
     if (sockfd < 0)
         return -1;
+
+    crypto_init();
 
     rc = io_dispatch(sockfd, listen ? NULL : &addr);
 

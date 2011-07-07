@@ -9,7 +9,7 @@
 #include "iface.h"
 #include "crypto.h"
 
-#define TUN_PROTO_ID 0
+#define HANDSHAKE_PROTO_ID 0
 
 enum peer_state
 {

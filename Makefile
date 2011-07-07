@@ -2,7 +2,7 @@ CC=gcc
 CFLAGS=-W -Wall -g
 
 TUN=tun
-TUN_OBJS=crypto.o handshake.o peer.o iface.o events.o io.o tun.o
+TUN_OBJS=tun_crypto.o crypto.o handshake.o peer.o iface.o events.o io.o tun.o
 TUN_CFLAGS=
 TUN_LDFLAGS=-lcrypto
 
@@ -25,7 +25,7 @@ $(GENKEY_OBJS): CFLAGS := $(CFLAGS) $(GENKEY_CFLAGS)
 
 .PHONY = all clean distclean
 
-handshake.o: priv.key
+tun_crypto.o: priv.key
 
 .deps.mk:
 	@echo "  [DEPS] $@"
