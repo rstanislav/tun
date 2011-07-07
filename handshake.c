@@ -28,7 +28,7 @@ static void handshake_send_pub(struct peer *p)
     hdr = (struct tun_pi *)pkt->buff;
     pubhdr = (struct pubhdr *)(hdr + 1);
     hdr->proto = htons(HANDSHAKE_PROTO_ID);
-    pkt->pkt_size = sizeof (struct tun_pi);
+    pkt->pkt_size = sizeof (struct tun_pi) + sizeof (struct pubhdr);
     pkt->pkt_size += crypto_pack_pub(privkey, pubhdr,
                                      (void *)(pubhdr + 1),
                                      pkt->buff_size - pkt->pkt_size);
@@ -74,6 +74,8 @@ int handshake_request(struct peer *p, struct pkt *pkt)
         unsigned char *data = (void *)(phdr + 1);
 
         p->pubkey = crypto_unpack_pub(phdr, data);
+        fprintf(stdout, "Received public key:\n");
+        RSA_print_fp(stdout, p->pubkey, 4);
 
         return 1;
     }
