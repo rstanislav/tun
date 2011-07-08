@@ -15,6 +15,9 @@
 
 LIST_HEAD(, peer) peer_list = {NULL};
 
+void peer_encrypt(struct pkt *, void *);
+void peer_decrypt(struct peer *, struct pkt *);
+
 struct peer *peer_lookup(struct sockaddr_in *addr)
 {
     struct peer *tmp, *p = NULL;
@@ -111,7 +114,7 @@ static int peer_iface_init(struct peer *p)
         return -1;
     }
     iface_event_start(p->iface, p->dispatch);
-    iface_set_tx(p->iface, p->tx, &p->addr);
+    iface_set_tx(p->iface, peer_encrypt, p);
 
     return 0;
 }
@@ -144,7 +147,7 @@ void peer_receive(struct peer *p, struct pkt *pkt)
     switch (ntohs(hdr->proto)) {
         case ETH_P_IP:
             if (p->state == PEER_CONNECTED)
-                iface_rx_schedule(p->iface, pkt);
+                peer_decrypt(p, pkt);
             else {
                 PEER_LOG(p, "Protocol error: unitialized connection.");
                 goto reset;
