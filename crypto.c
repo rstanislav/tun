@@ -125,3 +125,24 @@ RSA *crypto_unpack_pub(const struct pubhdr *h,
 
     return r;
 }
+
+char *crypto_hash_str(const unsigned char *data,
+                      unsigned long n)
+{
+    unsigned char digest[SHA_DIGEST_LENGTH];
+    char *ret;
+    int i, j;
+
+    SHA1(data, n, digest);
+
+    ret = malloc(SHA_DIGEST_LENGTH * 2 + 1);
+    if (!ret)
+        return NULL;
+
+    j = 0;
+    for (i = 0; i < SHA_DIGEST_LENGTH; i++)
+        j += sprintf(ret + j, "%02x", digest[i]);
+
+    return ret;
+}
+

@@ -54,8 +54,13 @@ int handshake_accept(struct peer *p, struct pkt *pkt)
     if (!p->pubkey) {
         struct pubhdr *phdr = (struct pubhdr *)(hdr + 1);
         unsigned char *data = (void *)(phdr + 1);
+        char *hash;
 
         p->pubkey = crypto_unpack_pub(phdr, data);
+
+        hash = crypto_hash_str(data, phdr->nlen + phdr->elen);
+        PEER_LOG(p, "Public key digest: %s", hash);
+        free(hash);
 
         handshake_send_pub(p);
 
@@ -72,10 +77,13 @@ int handshake_request(struct peer *p, struct pkt *pkt)
     if (!p->pubkey) {
         struct pubhdr *phdr = (struct pubhdr *)(hdr + 1);
         unsigned char *data = (void *)(phdr + 1);
+        char *hash;
 
         p->pubkey = crypto_unpack_pub(phdr, data);
-        fprintf(stdout, "Received public key:\n");
-        RSA_print_fp(stdout, p->pubkey, 4);
+
+        hash = crypto_hash_str(data, phdr->nlen + phdr->elen);
+        PEER_LOG(p, "Public key digest: %s", hash);
+        free(hash);
 
         return 1;
     }

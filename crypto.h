@@ -35,7 +35,7 @@ int crypto_pack_pub(RSA *r,
                     size_t len);
 RSA *crypto_unpack_pub(const struct pubhdr *h,
                        const unsigned char *data);
-
-
+char *crypto_hash_str(const unsigned char *data,
+                      unsigned long n);
 
 #endif

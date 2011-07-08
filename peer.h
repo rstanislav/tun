@@ -5,11 +5,18 @@
 #include <netinet/in.h>
 #include <sys/types.h>
 #include <linux/if_ether.h>
+#include <arpa/inet.h>
 
 #include "iface.h"
 #include "crypto.h"
 
 #define HANDSHAKE_PROTO_ID 0
+
+#define PEER_LOG(_p, fmt, ...) \
+    fprintf(stdout, "[%s:%d] "fmt"\n", \
+            inet_ntoa((_p)->addr.sin_addr), \
+            ntohs((_p)->addr.sin_port), \
+            ##__VA_ARGS__)
 
 enum peer_state
 {

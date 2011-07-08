@@ -2,7 +2,6 @@
 #include <unistd.h>
 #include <linux/if_tun.h>
 #include <linux/if_ether.h>
-#include <arpa/inet.h>
 #include <netinet/in.h>
 
 #include "pktqueue.h"
@@ -39,10 +38,6 @@ struct peer *peer_create(struct dispatch *d, struct sockaddr_in *addr,
     if (!p)
         return NULL;
 
-    fprintf(stdout, "New peer [%s:%d]\n",
-            inet_ntoa(addr->sin_addr),
-            ntohs(addr->sin_port));
-
     p->dispatch = d;
     p->state = PEER_CONN_RESET;
     p->tx = tx;
@@ -54,10 +49,6 @@ struct peer *peer_create(struct dispatch *d, struct sockaddr_in *addr,
 
 void peer_destroy(struct peer *p)
 {
-    fprintf(stdout, "Destroy peer [%s:%d]\n",
-            inet_ntoa(p->addr.sin_addr),
-            ntohs(p->addr.sin_port));
-
     if (p->iface) {
         iface_event_stop(p->iface);
         iface_destroy(p->iface);
@@ -127,11 +118,8 @@ static int peer_iface_init(struct peer *p)
 
 static void peer_set_state(struct peer *p, int state)
 {
-    fprintf(stdout, "Peer state change [%s:%d]: %s -> %s\n",
-            inet_ntoa(p->addr.sin_addr),
-            ntohs(p->addr.sin_port),
-            peer_state_str(p->state),
-            peer_state_str(state));
+    PEER_LOG(p, "%s -> %s", peer_state_str(p->state),
+             peer_state_str(state));
 
     p->state = state;
 }
@@ -158,9 +146,7 @@ void peer_receive(struct peer *p, struct pkt *pkt)
             if (p->state == PEER_CONNECTED)
                 iface_rx_schedule(p->iface, pkt);
             else {
-                fprintf(stdout, "Protocol error [%s:%d]: Uninitialized connection.\n",
-                        inet_ntoa(p->addr.sin_addr),
-                        ntohs(p->addr.sin_port));
+                PEER_LOG(p, "Protocol error: unitialized connection.");
                 goto reset;
             }
             break;
@@ -192,12 +178,11 @@ void peer_receive(struct peer *p, struct pkt *pkt)
                     break;
 
                 default:
-                    fprintf(stderr, "Bad state %d\n", p->state);
+                    PEER_LOG(p, "Bad state: %d", p->state);
             }
 
         default:
-            fprintf(stderr, "Unrecognized Protocol 0x%04x\n",
-                    ntohs(hdr->proto));
+            PEER_LOG (p, "Unrecognized Protocol ID 0x%04x", ntohs(hdr->proto));
     }
 
     return;

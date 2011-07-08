@@ -13,6 +13,7 @@ int main(void)
     struct keyhdr h;
     unsigned char buff[2048];
     int i = 0;
+    char *hash;
 
     r = RSA_generate_key(2048, 65537, NULL, NULL);
     if (!r) {
@@ -26,6 +27,10 @@ int main(void)
         fprintf(stderr, "Failed to pack key\n");
         return 1;
     }
+
+    hash = crypto_hash_str(buff, h.nlen + h.elen);
+    fprintf(stderr, "Public key SHA digest: %s\n", hash);
+    free(hash);
 
     fprintf(stdout, "{\n");
     fprintf(stdout, "  .nlen = %d,\n", h.nlen);
