@@ -16,6 +16,8 @@ static const struct
 
 RSA *privkey = NULL;
 
+#define MAGIC_IVEC {0, 1, 3, 3, 7, 0, 0, 255}
+
 void crypto_init(void)
 {
     int fd;
@@ -42,13 +44,23 @@ void crypto_init(void)
 void peer_encrypt(struct pkt *pkt, void *priv)
 {
     struct peer *p = priv;
+    unsigned char ivec[8] = MAGIC_IVEC;
+    int num;
+
+    BF_cfb64_encrypt((unsigned char *)pkt->buff, (unsigned char *)pkt->buff,
+                     pkt->pkt_size, &p->key, ivec, &num, BF_ENCRYPT);
 
     p->tx(pkt, &p->addr);
 }
 
 void peer_decrypt(struct peer *p, struct pkt *pkt)
 {
-    
+    unsigned char ivec[8] = MAGIC_IVEC;
+    int num;
+
+    BF_cfb64_encrypt((unsigned char *)pkt->buff, (unsigned char *)pkt->buff,
+                     pkt->pkt_size, &p->key, ivec, &num, BF_DECRYPT);
+
     iface_rx_schedule(p->iface, pkt);
 }
 
