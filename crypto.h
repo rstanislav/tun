@@ -2,6 +2,9 @@
 #define CRYPTO_H_
 
 #include <openssl/rsa.h>
+#include <openssl/rand.h>
+#include <openssl/blowfish.h>
+#include <openssl/sha.h>
 
 struct keyhdr
 {

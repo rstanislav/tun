@@ -51,6 +51,7 @@ struct peer
     struct iface *iface;
     struct dispatch *dispatch;
     RSA *pubkey;
+    BF_KEY key;
 
     tx_handler_t tx;
 };
