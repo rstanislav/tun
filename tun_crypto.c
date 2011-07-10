@@ -46,7 +46,7 @@ void peer_encrypt(struct pkt *pkt, void *priv)
 {
     struct peer *p = priv;
     unsigned char ivec[8] = MAGIC_IVEC;
-    int num;
+    int num = 0;
     struct tun_pi *hdr = (void *)pkt->buff;
     unsigned char *data = (void *)(hdr + 1);
     int len = pkt->pkt_size - sizeof (*hdr);
@@ -59,7 +59,7 @@ void peer_encrypt(struct pkt *pkt, void *priv)
 void peer_decrypt(struct peer *p, struct pkt *pkt)
 {
     unsigned char ivec[8] = MAGIC_IVEC;
-    int num;
+    int num = 0;
     struct tun_pi *hdr = (void *)pkt->buff;
     unsigned char *data = (void *)(hdr + 1);
     int len = pkt->pkt_size - sizeof (*hdr);
