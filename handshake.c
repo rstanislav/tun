@@ -154,8 +154,8 @@ int handshake_request(struct peer *p, struct pkt *pkt)
 
         p->pubkey = crypto_unpack_pub(phdr, data);
 
-        if (pkt->pkt_size < (sizeof (hdr) + sizeof (phdr) +
-                             phdr->nlen + phdr->elen +
+        if (pkt->pkt_size < (sizeof (*hdr) + sizeof (*phdr) +
+                             crypto_pub_len(p->pubkey) +
                              RSA_size(privkey)))
             return -1;
 
@@ -173,10 +173,11 @@ int handshake_request(struct peer *p, struct pkt *pkt)
                             RSA_PKCS1_OAEP_PADDING);
         SHA1(key, 16, keysha1);
         if (memcmp(key + 16, keysha1, SHA_DIGEST_LENGTH)) {
-            fprintf(stdout, "Invalid Key checksum\n");
+            PEER_LOG(p, "Invalid Key checksum");
             free(key);
             return -1;
         }
+
         BF_set_key(&p->key, 16, key);
         free(key);
 
