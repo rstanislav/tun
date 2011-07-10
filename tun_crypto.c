@@ -1,4 +1,5 @@
 #include <unistd.h>
+#include <linux/if_tun.h>
 
 #include "crypto.h"
 #include "peer.h"
@@ -46,9 +47,11 @@ void peer_encrypt(struct pkt *pkt, void *priv)
     struct peer *p = priv;
     unsigned char ivec[8] = MAGIC_IVEC;
     int num;
+    struct tun_pi *hdr = (void *)pkt->buff;
+    unsigned char *data = (void *)(hdr + 1);
+    int len = pkt->pkt_size - sizeof (*hdr);
 
-    BF_cfb64_encrypt((unsigned char *)pkt->buff, (unsigned char *)pkt->buff,
-                     pkt->pkt_size, &p->key, ivec, &num, BF_ENCRYPT);
+    BF_cfb64_encrypt(data, data, len, &p->key, ivec, &num, BF_ENCRYPT);
 
     p->tx(pkt, &p->addr);
 }
@@ -57,9 +60,11 @@ void peer_decrypt(struct peer *p, struct pkt *pkt)
 {
     unsigned char ivec[8] = MAGIC_IVEC;
     int num;
+    struct tun_pi *hdr = (void *)pkt->buff;
+    unsigned char *data = (void *)(hdr + 1);
+    int len = pkt->pkt_size - sizeof (*hdr);
 
-    BF_cfb64_encrypt((unsigned char *)pkt->buff, (unsigned char *)pkt->buff,
-                     pkt->pkt_size, &p->key, ivec, &num, BF_DECRYPT);
+    BF_cfb64_encrypt(data, data, len, &p->key, ivec, &num, BF_DECRYPT);
 
     iface_rx_schedule(p->iface, pkt);
 }
