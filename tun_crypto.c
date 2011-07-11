@@ -53,6 +53,7 @@ void peer_encrypt(struct pkt *pkt, void *priv)
 
     BF_cfb64_encrypt(data, data, len, &p->key, ivec, &num, BF_ENCRYPT);
 
+    p->tx_count++;
     p->tx(pkt, &p->addr);
 }
 

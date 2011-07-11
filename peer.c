@@ -3,6 +3,7 @@
 #include <linux/if_tun.h>
 #include <linux/if_ether.h>
 #include <netinet/in.h>
+#include <sys/timerfd.h>
 
 #include "pktqueue.h"
 #include "events.h"
@@ -12,6 +13,8 @@
 #ifndef IP_MTU
 # define IP_MTU 14
 #endif
+
+#define PEER_RX_TIMEOUT 10
 
 LIST_HEAD(, peer) peer_list = {NULL};
 
@@ -32,10 +35,52 @@ struct peer *peer_lookup(struct sockaddr_in *addr)
     return p;
 }
 
+static int timer_handler(int fd, unsigned short flags, void *priv)
+{
+    struct peer *p = priv;
+    uint64_t expirations;
+
+    (void)flags;
+
+    read(fd, &expirations, sizeof(expirations));
+
+    if (!p->tx_count) {
+        /* Send Keepalive */
+    }
+    if (!p->rx_count) {
+        if (--p->timeout == 0) {
+            PEER_LOG(p, "No RX activity recorded for the past %d seconds.",
+                     PEER_RX_TIMEOUT);
+            peer_destroy(p);
+            return DISPATCH_CONTINUE;
+        }
+    } else {
+        p->timeout = PEER_RX_TIMEOUT;
+    }
+
+    p->tx_count = p->rx_count = 0;
+
+    return DISPATCH_CONTINUE;
+}
+
+static void peer_arm_timer(struct peer *p, int enable)
+{
+    struct itimerspec its = {{0, 0}, {0, 0}};
+    struct itimerspec old;
+
+    if (enable) {
+        its.it_interval.tv_sec = 1;
+        its.it_value.tv_sec = 1;
+    }
+
+    timerfd_settime(p->timer->fd, 0, &its, &old);
+}
+
 struct peer *peer_create(struct dispatch *d, struct sockaddr_in *addr,
                          tx_handler_t tx)
 {
     struct peer *p;
+    int timerfd;
 
     p = calloc(1, sizeof (*p));
     if (!p)
@@ -46,6 +91,18 @@ struct peer *peer_create(struct dispatch *d, struct sockaddr_in *addr,
     p->tx = tx;
     memcpy(&p->addr, addr, sizeof (*addr));
     LIST_INSERT_HEAD(&peer_list, p, link);
+    timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
+    if (timerfd == -1) {
+        peer_destroy(p);
+        return NULL;
+    }
+    p->timer = event_create(p->dispatch, timerfd, EVENT_READ,
+                            timer_handler, p);
+    if (!p->timer) {
+        peer_destroy(p);
+        return NULL;
+    }
+    p->timeout = PEER_RX_TIMEOUT;
 
     return p;
 }
@@ -56,7 +113,11 @@ void peer_destroy(struct peer *p)
         iface_event_stop(p->iface);
         iface_destroy(p->iface);
     }
-
+    if (p->timer) {
+        int fd = p->timer->fd;
+        event_delete(p->dispatch, p->timer);
+        close(fd);
+    }
     LIST_REMOVE(p, link);
     free(p);
 }
@@ -183,18 +244,23 @@ void peer_receive(struct peer *p, struct pkt *pkt)
                 default:
                     PEER_LOG(p, "Bad state: %d", p->state);
             }
-
+        case KEEPALIVE_PROTO_ID:
+            break;
         default:
             PEER_LOG (p, "Unrecognized Protocol ID 0x%04x", ntohs(hdr->proto));
     }
 
+    p->rx_count++;
+
     return;
 
 reset:
+    peer_arm_timer(p, 0);
     handshake_reset(p);
     peer_set_state(p, PEER_CONN_RESET);
     return;
 connected:
+    peer_arm_timer(p, 1);
     peer_set_state(p, PEER_CONNECTED);
     peer_iface_init(p);
 }

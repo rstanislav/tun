@@ -11,6 +11,7 @@
 #include "crypto.h"
 
 #define HANDSHAKE_PROTO_ID 0
+#define KEEPALIVE_PROTO_ID 1
 
 #define PEER_LOG(_p, fmt, ...) \
     fprintf(stdout, "[%s:%d] "fmt"\n", \
@@ -52,6 +53,10 @@ struct peer
     struct dispatch *dispatch;
     RSA *pubkey;
     BF_KEY key;
+    struct event *timer;
+    int tx_count;
+    int rx_count;
+    int timeout;
 
     tx_handler_t tx;
 };
@@ -65,6 +70,7 @@ void peer_receive(struct peer *p, struct pkt *pkt);
 
 static inline void peer_send(struct peer *p, struct pkt *pkt)
 {
+    p->tx_count++;
     p->tx(pkt, &p->addr);
 }
 
