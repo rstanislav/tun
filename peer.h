@@ -57,6 +57,7 @@ struct peer
     int tx_count;
     int rx_count;
     int timeout;
+    int abort_on_destroy;
 
     tx_handler_t tx;
 };

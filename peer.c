@@ -21,6 +21,32 @@ LIST_HEAD(, peer) peer_list = {NULL};
 void peer_encrypt(struct pkt *, void *);
 void peer_decrypt(struct peer *, struct pkt *);
 
+static void peer_keepalive_complete(struct pkt *pkt, void *priv)
+{
+    (void)priv;
+
+    pkt_free(pkt);
+}
+
+static void peer_send_keepalive(struct peer *p)
+{
+    struct pkt *pkt;
+    struct tun_pi *hdr;
+
+    pkt = pkt_alloc(sizeof (struct tun_pi));
+    if (!pkt)
+        return;
+
+    hdr = (struct tun_pi *)pkt->buff;
+    hdr->proto = htons(KEEPALIVE_PROTO_ID);
+    hdr->flags = 0;
+    pkt->pkt_size = sizeof (struct tun_pi);
+
+    pkt_set_compl(pkt, peer_keepalive_complete, NULL);
+
+    p->tx(pkt, &p->addr);
+}
+
 struct peer *peer_lookup(struct sockaddr_in *addr)
 {
     struct peer *tmp, *p = NULL;
@@ -45,14 +71,19 @@ static int timer_handler(int fd, unsigned short flags, void *priv)
     read(fd, &expirations, sizeof(expirations));
 
     if (!p->tx_count) {
-        /* Send Keepalive */
+        peer_send_keepalive(p);
     }
     if (!p->rx_count) {
         if (--p->timeout == 0) {
-            PEER_LOG(p, "No RX activity recorded for the past %d seconds.",
+            PEER_LOG(p, "No RX activity recorded for the past %d seconds."
+                        " Destroying...",
                      PEER_RX_TIMEOUT);
-            peer_destroy(p);
-            return DISPATCH_CONTINUE;
+            if (p->abort_on_destroy)
+                return DISPATCH_ABORT;
+            else {
+                peer_destroy(p);
+                return DISPATCH_CONTINUE;
+            }
         }
     } else {
         p->timeout = PEER_RX_TIMEOUT;
@@ -191,6 +222,7 @@ static void peer_set_state(struct peer *p, int state)
 void peer_connect(struct peer *p)
 {
     peer_set_state(p, PEER_CONN_REQUEST);
+    p->abort_on_destroy = 1;
 
     handshake_init(p);
 }

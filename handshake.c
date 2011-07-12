@@ -27,6 +27,7 @@ static void handshake_send_pub(struct peer *p)
         return;
     hdr = (struct tun_pi *)pkt->buff;
     pubhdr = (struct pubhdr *)(hdr + 1);
+    hdr->flags = 0;
     hdr->proto = htons(HANDSHAKE_PROTO_ID);
     pkt->pkt_size = sizeof (struct tun_pi) + sizeof (struct pubhdr);
     pkt->pkt_size += crypto_pack_pub(privkey, pubhdr,
@@ -67,6 +68,7 @@ static void handshake_send_key(struct peer *p)
     hdr = (struct tun_pi *)pkt->buff;
     pubhdr = (struct pubhdr *)(hdr + 1);
     hdr->proto = htons(HANDSHAKE_PROTO_ID);
+    hdr->flags = 0;
 
     pkt->pkt_size = sizeof (struct tun_pi) +
                     sizeof (struct pubhdr);
