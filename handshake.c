@@ -35,6 +35,7 @@
 #include <stdio.h>
 
 #include "peer.h"
+#include "tun_crypto.h"
 #include "crypto.h"
 
 extern RSA *privkey;
@@ -60,11 +61,30 @@ static void handshake_send_pub(struct peer *p)
     hdr = (struct tun_pi *)pkt->buff;
     pubhdr = (struct pubhdr *)(hdr + 1);
     hdr->flags = 0;
-    hdr->proto = htons(HANDSHAKE_PROTO_ID);
+    hdr->proto = htons(RSA_HANDSHAKE_PROTO);
     pkt->pkt_size = sizeof (struct tun_pi) + sizeof (struct pubhdr);
     pkt->pkt_size += crypto_pack_pub(privkey, pubhdr,
                                      (void *)(pubhdr + 1),
                                      pkt->buff_size - pkt->pkt_size);
+    pkt_set_compl(pkt, handshake_pkt_complete, NULL);
+
+    peer_send(p, pkt);
+}
+
+static void handshake_send_hello(struct peer *p)
+{
+    struct pkt *pkt;
+    struct tun_pi *hdr;
+    char message[5] = "HELLO";
+
+    pkt = pkt_alloc(sizeof (struct tun_pi) + sizeof (message));
+    if (!pkt)
+        return;
+    hdr = (struct tun_pi *)pkt->buff;
+    hdr->flags = 0;
+    hdr->proto = htons(PLAINTEXT_HANDSHAKE_PROTO);
+    pkt->pkt_size = sizeof (struct tun_pi) + sizeof (message);
+    strncpy((void *)(hdr + 1), message, sizeof (message));
     pkt_set_compl(pkt, handshake_pkt_complete, NULL);
 
     peer_send(p, pkt);
@@ -77,7 +97,10 @@ static int handshake_gen_key(struct peer *p, unsigned char *buf, int len)
     rc = RAND_bytes(buf, len);
     if (rc != 1)
         return -1;
-    BF_set_key(&p->key, len, buf);
+    p->key = malloc(sizeof (BF_KEY));
+    if (!p->key)
+        return -1;
+    BF_set_key(p->key, len, buf);
 
     return 0;
 }
@@ -99,7 +122,7 @@ static void handshake_send_key(struct peer *p)
 
     hdr = (struct tun_pi *)pkt->buff;
     pubhdr = (struct pubhdr *)(hdr + 1);
-    hdr->proto = htons(HANDSHAKE_PROTO_ID);
+    hdr->proto = htons(RSA_HANDSHAKE_PROTO);
     hdr->flags = 0;
 
     pkt->pkt_size = sizeof (struct tun_pi) +
@@ -130,7 +153,10 @@ static void handshake_send_key(struct peer *p)
 
 void handshake_init(struct peer *p)
 {
-    handshake_send_pub(p);
+    if (privkey)
+        handshake_send_pub(p);
+    else
+        handshake_send_hello(p);
 }
 
 void handshake_reset(struct peer *p)
@@ -143,10 +169,29 @@ int handshake_accept(struct peer *p, struct pkt *pkt)
 {
     struct tun_pi *hdr = (struct tun_pi *)pkt->buff;
 
-    if (!p->pubkey) {
+    if (privkey && ntohs(hdr->proto) == PLAINTEXT_HANDSHAKE_PROTO) {
+        PEER_LOG(p, "Peer is attempting to establish connection in plain text");
+        return -1;
+    }
+
+    if (!privkey && ntohs(hdr->proto) == RSA_HANDSHAKE_PROTO) {
+        PEER_LOG(p, "Peer is attempting to perform RSA key exchange");
+        return -1;
+    }
+
+    if (!privkey) {
+        /* Plaintext */
+        unsigned char *data = (void *)(hdr + 1);
+        int msglen = pkt->pkt_size - sizeof (hdr);
+
+        if (!strncmp((char *)data, "HELLO", msglen)) {
+            handshake_send_hello(p);
+            return 1;
+        }
+    } else if (!p->pubkey) {
+        /* RSA */
         struct pubhdr *phdr = (struct pubhdr *)(hdr + 1);
         unsigned char *data = (void *)(phdr + 1);
-        char *hash;
 
         if (pkt->pkt_size < (sizeof (hdr) + sizeof (phdr)))
             return -1;
@@ -156,9 +201,8 @@ int handshake_accept(struct peer *p, struct pkt *pkt)
 
         p->pubkey = crypto_unpack_pub(phdr, data);
 
-        hash = crypto_hash_str(data, phdr->nlen + phdr->elen);
-        PEER_LOG(p, "Public key digest: %s", hash);
-        free(hash);
+        if (!crypto_accept_key(data, phdr->nlen + phdr->elen))
+            return -1;
 
         handshake_send_key(p);
 
@@ -172,10 +216,28 @@ int handshake_request(struct peer *p, struct pkt *pkt)
 {
     struct tun_pi *hdr = (struct tun_pi *)pkt->buff;
 
-    if (!p->pubkey) {
+    if (privkey && ntohs(hdr->proto) == PLAINTEXT_HANDSHAKE_PROTO) {
+        PEER_LOG(p, "Peer is attempting to establish connection in plain text");
+        return -1;
+    }
+
+    if (!privkey && ntohs(hdr->proto) == RSA_HANDSHAKE_PROTO) {
+        PEER_LOG(p, "Peer is attempting to perform RSA key exchange");
+        return -1;
+    }
+
+    if (!privkey) {
+        /* Plaintext */
+        unsigned char *data = (void *)(hdr + 1);
+        int msglen = pkt->pkt_size - sizeof (hdr);
+
+        if (!strncmp((char *)data, "HELLO", msglen)) {
+            return 1;
+        }
+    } else if (!p->pubkey) {
+        /* RSA */
         struct pubhdr *phdr = (struct pubhdr *)(hdr + 1);
         unsigned char *data = (void *)(phdr + 1);
-        char *hash;
         unsigned char *key;
         unsigned char keysha1[SHA_DIGEST_LENGTH];
         int len;
@@ -193,9 +255,8 @@ int handshake_request(struct peer *p, struct pkt *pkt)
                              RSA_size(privkey)))
             return -1;
 
-        hash = crypto_hash_str(data, phdr->nlen + phdr->elen);
-        PEER_LOG(p, "Public key digest: %s", hash);
-        free(hash);
+        if (!crypto_accept_key(data, phdr->nlen + phdr->elen))
+            return -1;
 
         key = malloc(RSA_size(privkey));
         if (!key)
@@ -212,7 +273,12 @@ int handshake_request(struct peer *p, struct pkt *pkt)
             return -1;
         }
 
-        BF_set_key(&p->key, 16, key);
+        p->key = malloc(sizeof (BF_KEY));
+        if (!p->key) {
+            free(key);
+            return -1;
+        }
+        BF_set_key(p->key, 16, key);
         free(key);
 
         return 1;

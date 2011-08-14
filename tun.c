@@ -46,11 +46,25 @@
 #include <netinet/ip.h>
 #include <arpa/inet.h>
 
+#include "tun_crypto.h"
+
 static void usage(char *progname)
 {
     fprintf(stderr, "Usage:\n");
-    fprintf(stderr, "\t%s [-option] hostname port\n", progname);
-    fprintf(stderr, "\t%s -l [-option] port\n", progname);
+    fprintf(stderr, "    %s [OPTION] hostname port\n", progname);
+    fprintf(stderr, "    %s -l [OPTION] port\n", progname);
+    fprintf(stderr, "Options:\n");
+    fprintf(stderr, "    -k <filename>          Path to the file containing the private RSA key to use\n"
+                    "                           for securing communication with peer. If none is given,\n"
+                    "                           communication will be sent in plain text.\n");
+#if 0 /* FIXME */
+    fprintf(stderr, "    -a <digest list>       Comma separated list of SHA-1 public key digests that %s\n"
+                    "                           will automatically accept when establishing a secure\n"
+                    "                           channel with the remote host. If the remote host's public\n"
+                    "                           key digest is not listed, the user will be prompted to\n"
+                    "                           accept the remote host RSA key on the standard output.\n",
+                    progname);
+#endif
 }
 
 static int sock_alloc(int listen, struct sockaddr_in *addr)
@@ -84,15 +98,13 @@ static int sock_alloc(int listen, struct sockaddr_in *addr)
     return fd;
 }
 
+/*
+ * My little poney ugly function.
+ */
 static int parse_opts(int argc, char **argv, struct sockaddr_in *addr, int *listen)
 {
     int i;
-
-    if (argc < 3) {
-        fprintf(stderr, "%s needs at least 2 arguments\n", argv[0]);
-        usage(argv[0]);
-        return -1;
-    }
+    int a = 0, p = 0;
 
     i = 1;
     while (i < argc) {
@@ -103,6 +115,21 @@ static int parse_opts(int argc, char **argv, struct sockaddr_in *addr, int *list
 
         if (!strcmp(argv[i], "-l")) {
             *listen = 1;
+        } else if (!strcmp(argv[i], "-k")) {
+            i++;
+            if (crypto_load_key(argv[i])) {
+                fprintf(stderr, "Failed to load key file %s: %s\n", argv[i],
+                        strerror(errno));
+                goto printusage;
+            }
+#if 0 /* FIXME */
+        } else if (!strcmp(argv[i], "-a")) {
+            i++;
+            if (crypto_accept_list(argv[i])) {
+                fprintf(stderr, "Syntax error in accept list: %s\n", argv[i]);
+                goto printusage;
+            }
+#endif
         } else {
             if (argv[i][0] == '-') {
                 fprintf(stderr, "Unrecognized option: %s\n", argv[i]);
@@ -117,11 +144,13 @@ static int parse_opts(int argc, char **argv, struct sockaddr_in *addr, int *list
                     goto printusage;
                 }
                 addr->sin_port = htons(n);
+                p = 1;
             } else if (!*listen && ((i + 2) == argc)) {
                 if (!inet_aton(argv[i], &addr->sin_addr)) {
                     fprintf(stderr, "Bad IP address format: %s\n", argv[i]);
                     goto printusage;
                 }
+                a = 1;
             } else {
                 fprintf(stderr, "Unrecognized argument: %s\n", argv[i]);
                 goto printusage;
@@ -129,6 +158,12 @@ static int parse_opts(int argc, char **argv, struct sockaddr_in *addr, int *list
         }
 
         i++;
+    }
+
+    if (!p || (!*listen && !a)) {
+        fprintf(stderr, "Missing parameters\n");
+        usage(argv[0]);
+        return -1;
     }
 
     if (*listen && addr->sin_addr.s_addr) {
@@ -148,7 +183,6 @@ printusage:
 }
 
 int io_dispatch(int sockfd, struct sockaddr_in *remote);
-void crypto_init(void);
 
 int main(int argc, char **argv)
 {

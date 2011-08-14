@@ -41,6 +41,7 @@
 #include "events.h"
 #include "iface.h"
 #include "peer.h"
+#include "tun_crypto.h"
 
 #ifndef IP_MTU
 # define IP_MTU 14
@@ -50,8 +51,31 @@
 
 LIST_HEAD(, peer) peer_list = {NULL};
 
-void peer_encrypt(struct pkt *, void *);
-void peer_decrypt(struct peer *, struct pkt *);
+void peer_encrypt(struct pkt *pkt, void *priv)
+{
+    struct peer *p = priv;
+    struct tun_pi *hdr = (void *)pkt->buff;
+    unsigned char *data = (void *)(hdr + 1);
+    int len = pkt->pkt_size - sizeof (*hdr);
+
+    if (p->key)
+        encrypt_data(data, len, p->key);
+
+    p->tx_count++;
+    p->tx(pkt, &p->addr);
+}
+
+void peer_decrypt(struct peer *p, struct pkt *pkt)
+{
+    struct tun_pi *hdr = (void *)pkt->buff;
+    unsigned char *data = (void *)(hdr + 1);
+    int len = pkt->pkt_size - sizeof (*hdr);
+
+    if (p->key)
+        decrypt_data(data, len, p->key);
+
+    iface_rx_schedule(p->iface, pkt);
+}
 
 static void peer_keepalive_complete(struct pkt *pkt, void *priv)
 {
@@ -70,7 +94,7 @@ static void peer_send_keepalive(struct peer *p)
         return;
 
     hdr = (struct tun_pi *)pkt->buff;
-    hdr->proto = htons(KEEPALIVE_PROTO_ID);
+    hdr->proto = htons(KEEPALIVE_PROTO);
     hdr->flags = 0;
     pkt->pkt_size = sizeof (struct tun_pi);
 
@@ -181,6 +205,9 @@ void peer_destroy(struct peer *p)
         event_delete(p->dispatch, p->timer);
         close(fd);
     }
+    if (p->key) {
+        free(p->key);
+    }
     LIST_REMOVE(p, link);
     free(p);
 }
@@ -279,7 +306,8 @@ void peer_receive(struct peer *p, struct pkt *pkt)
             }
             break;
 
-        case HANDSHAKE_PROTO_ID:
+        case RSA_HANDSHAKE_PROTO:
+        case PLAINTEXT_HANDSHAKE_PROTO:
             switch (p->state) {
                 case PEER_CONN_RESET:
                     peer_set_state(p, PEER_CONN_ACCEPT);
@@ -308,7 +336,7 @@ void peer_receive(struct peer *p, struct pkt *pkt)
                 default:
                     PEER_LOG(p, "Bad state: %d", p->state);
             }
-        case KEEPALIVE_PROTO_ID:
+        case KEEPALIVE_PROTO:
             break;
         default:
             PEER_LOG (p, "Unrecognized Protocol ID 0x%04x", ntohs(hdr->proto));

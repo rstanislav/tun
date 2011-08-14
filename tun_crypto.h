@@ -30,63 +30,37 @@
  *  SUCH DAMAGE.
  */
 
-#include <stdio.h>
-#include <string.h>
+#ifndef TUN_CRYPTO_H_
+#define TUN_CRYPTO_H_
 
-#include <openssl/rsa.h>
-#include <openssl/engine.h>
+#include <openssl/blowfish.h>
 
-#include "crypto.h"
+#define MAGIC_IVEC {0, 1, 3, 3, 7, 0, 0, 255}
 
-int main(void)
+void crypto_init(void);
+int crypto_load_key(const char *filename);
+int crypto_accept_list(const char *list);
+int crypto_accept_key(const unsigned char *data, unsigned long len);
+
+static inline void encrypt_data(unsigned char *data,
+                                int len,
+                                void *key)
 {
-    int rc;
-    RSA *r;
-    struct keyhdr h;
-    unsigned char buff[2048];
-    int i = 0;
-    char *hash;
+    unsigned char ivec[8] = MAGIC_IVEC;
+    int num = 0;
 
-    r = RSA_generate_key(2048, 65537, NULL, NULL);
-    if (!r) {
-        fprintf(stderr, "Key generation failed\n");
-        return 1;
-    }
-
-    rc = crypto_pack_key(r, &h, buff, 2048);
-    RSA_free(r);
-    if (rc == -1) {
-        fprintf(stderr, "Failed to pack key\n");
-        return 1;
-    }
-
-    hash = crypto_hash_str(buff, h.nlen + h.elen);
-    fprintf(stderr, "Public key SHA digest: %s\n", hash);
-    free(hash);
-
-    fprintf(stdout, "{\n");
-    fprintf(stdout, "  .nlen = %d,\n", h.nlen);
-    fprintf(stdout, "  .elen = %d,\n", h.elen);
-    fprintf(stdout, "  .dlen = %d,\n", h.dlen);
-    fprintf(stdout, "  .plen = %d,\n", h.plen);
-    fprintf(stdout, "  .qlen = %d,\n", h.qlen);
-    fprintf(stdout, "  .dmp1len = %d,\n", h.dmp1len);
-    fprintf(stdout, "  .dmq1len = %d,\n", h.dmq1len);
-    fprintf(stdout, "  .iqmplen = %d\n", h.iqmplen);
-    fprintf(stdout, "},\n");
-
-    fprintf(stdout, "{\n");
-    if (rc)
-        fprintf(stdout, "  0x%02x", buff[i++]);
-    while (i < rc) {
-        if (i % 16)
-            fprintf(stdout, ", 0x%02x", buff[i++]);
-        else
-            fprintf(stdout, ",\n  0x%02x", buff[i++]);
-    }
-    fprintf(stdout, "\n}\n");
-
-    memset(buff, 0, sizeof (buff));
-    return 0;
+    BF_cfb64_encrypt(data, data, len, key, ivec, &num, BF_ENCRYPT);
 }
+
+static inline void decrypt_data(unsigned char *data,
+                                int len,
+                                void *key)
+{
+    unsigned char ivec[8] = MAGIC_IVEC;
+    int num = 0;
+
+    BF_cfb64_encrypt(data, data, len, key, ivec, &num, BF_DECRYPT);
+}
+
+#endif /* TUN_CRYPTO_H_ */
 

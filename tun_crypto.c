@@ -37,27 +37,13 @@
 #include "peer.h"
 #include "iface.h"
 
-#ifndef GEN_DEPS
-static const struct
-{
-    struct keyhdr hdr;
-    unsigned char data[];
-} binkey = {
-#include "priv.key"
-};
-#endif
-
 RSA *privkey = NULL;
-
-#define MAGIC_IVEC {0, 1, 3, 3, 7, 0, 0, 255}
 
 void crypto_init(void)
 {
     int fd;
     int rc;
     unsigned char r[16];
-
-    privkey = crypto_unpack_key(&binkey.hdr, binkey.data);
 
     RAND_seed(r, 16);
     fd = open("/dev/urandom", O_RDONLY);
@@ -74,31 +60,96 @@ void crypto_init(void)
     close (fd);
 }
 
-void peer_encrypt(struct pkt *pkt, void *priv)
+int crypto_load_key(const char *filename)
 {
-    struct peer *p = priv;
-    unsigned char ivec[8] = MAGIC_IVEC;
-    int num = 0;
-    struct tun_pi *hdr = (void *)pkt->buff;
-    unsigned char *data = (void *)(hdr + 1);
-    int len = pkt->pkt_size - sizeof (*hdr);
+    int fd;
+    struct keyhdr hdr;
+    int rc;
+    int len;
+    unsigned char *data = NULL;
+    int i;
+    char *hash;
 
-    BF_cfb64_encrypt(data, data, len, &p->key, ivec, &num, BF_ENCRYPT);
+    fd = open(filename, O_RDONLY);
+    if (fd == -1)
+        return -1;
 
-    p->tx_count++;
-    p->tx(pkt, &p->addr);
+    rc = read(fd, &hdr, sizeof (hdr));
+    if (rc != sizeof (hdr)) {
+        close(fd);
+        return -1;
+    }
+
+    len = hdr.nlen + hdr.elen + hdr.dlen + hdr.plen + hdr.qlen +
+          hdr.dmp1len + hdr.dmq1len + hdr.iqmplen;
+    data = malloc(len);
+    if (!data) {
+        close(fd);
+        return -1;
+    }
+
+    i = 0;
+    do {
+        rc = read(fd, data + i, len - i);
+        if (rc == -1) {
+            free(data);
+            close(fd);
+            return -1;
+        }
+        i += rc;
+    } while (i < len);
+
+    hash = crypto_hash_str(data, hdr.nlen + hdr.elen);
+    if (hash) {
+        fprintf(stdout, "Loaded RSA key pair. Public key SHA digest: %s\n",
+                hash);
+        free(hash);
+    }
+
+    privkey = crypto_unpack_key(&hdr, data);
+
+    free(data);
+    close(fd);
+    return !privkey;
 }
 
-void peer_decrypt(struct peer *p, struct pkt *pkt)
+int crypto_accept_key(const unsigned char *data, unsigned long len)
 {
-    unsigned char ivec[8] = MAGIC_IVEC;
-    int num = 0;
-    struct tun_pi *hdr = (void *)pkt->buff;
-    unsigned char *data = (void *)(hdr + 1);
-    int len = pkt->pkt_size - sizeof (*hdr);
+    char c;
+    int rc;
+    unsigned char digest[SHA_DIGEST_LENGTH];
+    int i;
 
-    BF_cfb64_encrypt(data, data, len, &p->key, ivec, &num, BF_DECRYPT);
+    SHA1(data, len, digest);
 
-    iface_rx_schedule(p->iface, pkt);
+    fprintf(stdout, "Remote host public key digest: ");
+    for (i = 0; i < SHA_DIGEST_LENGTH; i++) {
+        fprintf(stdout, "%02x", digest[i]);
+    }
+    fprintf(stdout, "\n");
+
+    {
+        char *line = NULL;
+        size_t n = 0;
+
+        do {
+            fprintf(stdout, "Do you want to accept public key ? (y/n):");
+            rc = getline(&line, &n, stdin);
+            if (rc <= 0)
+                return 0;
+
+            rc = sscanf(line, "%c\n", &c);
+            if (rc != 1)
+                return 0;
+        } while (c != 'y' && c != 'n');
+
+        if (line)
+            free(line);
+    }
+
+    if (c == 'n')
+        return 0;
+
+    return 1;
 }
 

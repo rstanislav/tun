@@ -42,8 +42,12 @@
 #include "iface.h"
 #include "crypto.h"
 
-#define HANDSHAKE_PROTO_ID 0
-#define KEEPALIVE_PROTO_ID 1
+enum proto_id
+{
+    RSA_HANDSHAKE_PROTO = 0,
+    PLAINTEXT_HANDSHAKE_PROTO,
+    KEEPALIVE_PROTO,
+};
 
 #define PEER_LOG(_p, fmt, ...) \
     fprintf(stdout, "[%s:%d] "fmt"\n", \
@@ -84,7 +88,7 @@ struct peer
     struct iface *iface;
     struct dispatch *dispatch;
     RSA *pubkey;
-    BF_KEY key;
+    BF_KEY *key;
     struct event *timer;
     int tx_count;
     int rx_count;

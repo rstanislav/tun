@@ -6,12 +6,12 @@ TUN_OBJS=tun_crypto.o crypto.o handshake.o peer.o iface.o events.o io.o tun.o
 TUN_CFLAGS=
 TUN_LDFLAGS=-lcrypto
 
-GENKEY=generate_keypair
-GENKEY_OBJS=crypto.o generate_keypair.o
+GENKEY=genkey
+GENKEY_OBJS=crypto.o genkey.o
 GENKEY_CFLAGS=
 GENKEY_LDFLAGS=-lcrypto
 
-all: $(TUN)
+all: $(GENKEY) $(TUN)
 
 $(TUN): $(TUN_OBJS)
 	@echo "  [LD] $@"
@@ -25,16 +25,10 @@ $(GENKEY_OBJS): CFLAGS := $(CFLAGS) $(GENKEY_CFLAGS)
 
 .PHONY = all clean distclean
 
-tun_crypto.o: priv.key
-
 .deps.mk:
 	@echo "  [DEPS] $@"
 	@$(CC) -MM -DGEN_DEPS $(TUN_CFLAGS) $(TUN_OBJS:.o=.c) > $@
 	@$(CC) -MM -DGEN_DEPS $(GENKEY_CFLAGS) $(GENKEY_OBJS:.o=.c) >> $@
-
-priv.key: $(GENKEY)
-	@echo "  [GENKEY] priv.key"
-	@./$(GENKEY) > priv.key
 
 clean:
 	rm -f $(TUN) $(TUN_OBJS)
@@ -43,7 +37,6 @@ clean:
 distclean:
 	rm -f $(TUN) $(TUN_OBJS)
 	rm -f $(GENKEY) $(GENKEY_OBJS)
-	rm -f priv.key
 	rm -f .deps.mk
     
 %.o: %.c
