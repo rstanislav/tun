@@ -27,12 +27,12 @@ struct dispatch
     LIST_HEAD(,event) handlers;
 };
 
-#define	LIST_FOREACH_SAFE(var, tmp, head, field)                        \
-        for ((var) = ((head)->lh_first),                                \
-                (tmp) = (var) ? (var)->field.le_next : NULL;            \
-             (var);                                                     \
-	     (var) = (tmp),                                             \
-                (tmp) = (var) ? (var)->field.le_next : NULL)            \
+#ifndef LIST_FOREACH_SAFE
+# define LIST_FOREACH_SAFE(var, head, field, tvar)                   \
+    for ((var) = LIST_FIRST((head));                                 \
+         (var) && ((tvar) = LIST_NEXT((var), field), 1);             \
+         (var) = (tvar))
+#endif
 
 enum event_control
 {

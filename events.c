@@ -141,7 +141,7 @@ void dispatch_cleanup(struct dispatch *d)
     struct event *e, *te;
 
     close(d->epfd);
-    LIST_FOREACH_SAFE(e, te, &d->handlers, link) {
+    LIST_FOREACH_SAFE(e, &d->handlers, link, te) {
         event_delete(d, e);
     }
 }
