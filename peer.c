@@ -41,7 +41,6 @@
 #include "events.h"
 #include "iface.h"
 #include "peer.h"
-#include "tun_crypto.h"
 
 #ifndef IP_MTU
 # define IP_MTU 14
@@ -51,54 +50,64 @@
 
 LIST_HEAD(, peer) peer_list = {NULL};
 
-void peer_encrypt(struct pkt *pkt, void *priv)
+void peer_tx(struct pkt *pkt, void *priv)
 {
     struct peer *p = priv;
+#if 0
     struct tun_pi *hdr = (void *)pkt->buff;
     unsigned char *data = (void *)(hdr + 1);
     int len = pkt->pkt_size - sizeof (*hdr);
 
-    if (p->key)
-        encrypt_data(data, len, p->key);
+    /* tx filter */
+#endif
 
     p->tx_count++;
     p->tx(pkt, &p->addr);
 }
 
-void peer_decrypt(struct peer *p, struct pkt *pkt)
+void peer_rx(struct peer *p, struct pkt *pkt)
 {
+#if 0
     struct tun_pi *hdr = (void *)pkt->buff;
     unsigned char *data = (void *)(hdr + 1);
     int len = pkt->pkt_size - sizeof (*hdr);
 
-    if (p->key)
-        decrypt_data(data, len, p->key);
+    /* rx filter */
+#endif
 
     iface_rx_schedule(p->iface, pkt);
 }
 
-static void peer_keepalive_complete(struct pkt *pkt, void *priv)
+static struct pkt *tun_ctl_pkt(__u8 flags)
 {
-    (void)priv;
+    struct pkt *pkt;
+    struct tun_pi *hdr;
+    struct tun_ctl *ctl;
+    size_t len;
 
-    pkt_free(pkt);
+    len = sizeof (struct tun_pi) + sizeof (struct tun_ctl);
+
+    pkt = pkt_alloc(len);
+    if (!pkt)
+        return NULL;
+    hdr = (struct tun_pi *)pkt->buff;
+    hdr->flags = 0;
+    hdr->proto = htons(TUN_CTL_PROTO);
+    pkt->pkt_size = len;
+
+    ctl = (void *)(hdr + 1);
+    ctl->ctl_flags = flags;
+
+    return pkt;
 }
 
 static void peer_send_keepalive(struct peer *p)
 {
     struct pkt *pkt;
-    struct tun_pi *hdr;
 
-    pkt = pkt_alloc(sizeof (struct tun_pi));
+    pkt = tun_ctl_pkt(0);
     if (!pkt)
         return;
-
-    hdr = (struct tun_pi *)pkt->buff;
-    hdr->proto = htons(KEEPALIVE_PROTO);
-    hdr->flags = 0;
-    pkt->pkt_size = sizeof (struct tun_pi);
-
-    pkt_set_compl(pkt, peer_keepalive_complete, NULL);
 
     p->tx(pkt, &p->addr);
 }
@@ -121,10 +130,16 @@ static int timer_handler(int fd, unsigned short flags, void *priv)
 {
     struct peer *p = priv;
     uint64_t expirations;
+    int rc;
 
     (void)flags;
 
-    read(fd, &expirations, sizeof(expirations));
+    rc = read(fd, &expirations, sizeof(expirations));
+    if (rc != sizeof (expirations))
+        PEER_LOG(p, "???");
+
+    if (p->state == PEER_STATE_CLOSED)
+        goto destroy;
 
     if (!p->tx_count) {
         peer_send_keepalive(p);
@@ -134,6 +149,7 @@ static int timer_handler(int fd, unsigned short flags, void *priv)
             PEER_LOG(p, "No RX activity recorded for the past %d seconds."
                         " Destroying...",
                      PEER_RX_TIMEOUT);
+destroy:
             if (p->abort_on_destroy)
                 return DISPATCH_ABORT;
             else {
@@ -174,7 +190,7 @@ struct peer *peer_create(struct dispatch *d, struct sockaddr_in *addr,
         return NULL;
 
     p->dispatch = d;
-    p->state = PEER_CONN_RESET;
+    p->state = PEER_STATE_INVALID;
     p->tx = tx;
     memcpy(&p->addr, addr, sizeof (*addr));
     LIST_INSERT_HEAD(&peer_list, p, link);
@@ -204,9 +220,6 @@ void peer_destroy(struct peer *p)
         int fd = p->timer->fd;
         event_delete(p->dispatch, p->timer);
         close(fd);
-    }
-    if (p->key) {
-        free(p->key);
     }
     LIST_REMOVE(p, link);
     free(p);
@@ -265,7 +278,7 @@ static int peer_iface_init(struct peer *p)
         return -1;
     }
     iface_event_start(p->iface, p->dispatch);
-    iface_set_tx(p->iface, peer_encrypt, p);
+    iface_set_tx(p->iface, peer_tx, p);
 
     return 0;
 }
@@ -280,80 +293,99 @@ static void peer_set_state(struct peer *p, int state)
 
 void peer_connect(struct peer *p)
 {
-    peer_set_state(p, PEER_CONN_REQUEST);
-    p->abort_on_destroy = 1;
+    struct pkt *pkt;
 
-    handshake_init(p);
+    /* Ship SYN */
+    pkt = tun_ctl_pkt(TUN_CTL_SYN);
+    peer_send(p, pkt);
+
+    peer_set_state(p, PEER_STATE_CONNECTING);
+    p->abort_on_destroy = 1;
+}
+
+void peer_listen(struct peer *p)
+{
+    peer_set_state(p, PEER_STATE_LISTENING);
+}
+
+void peer_ctl_rx(struct peer *p, struct pkt *pkt)
+{
+    struct tun_pi *hdr = (struct tun_pi *)pkt->buff;
+    struct tun_ctl *ctl = (void *)(hdr + 1);
+    size_t len = pkt->pkt_size - sizeof (*hdr);
+
+    if (len < sizeof (*ctl)) {
+        PEER_LOG(p, "Control packet too small.");
+        return;
+    }
+
+    switch (p->state) {
+    case PEER_STATE_INVALID:
+        PEER_LOG(p, "Invalid peer state.");
+        break;
+
+    case PEER_STATE_LISTENING:
+        if (ctl->ctl_flags & TUN_CTL_SYN) {
+            struct pkt *ack = tun_ctl_pkt(TUN_CTL_ACK);
+
+            peer_send(p, ack);
+            goto set_connected;
+        }
+        break;
+
+    case PEER_STATE_CONNECTING:
+        if (ctl->ctl_flags & TUN_CTL_RST)
+            goto set_closed;
+        if (ctl->ctl_flags & TUN_CTL_ACK)
+            goto set_connected;
+        break;
+
+    case PEER_STATE_CONNECTED:
+        if (ctl->ctl_flags & TUN_CTL_RST)
+            goto set_closed;
+        break;
+
+    default:
+        PEER_LOG(p, "Bad state: %d", p->state);
+
+    }
+
+    return;
+set_closed:
+    peer_set_state(p, PEER_STATE_CLOSED);
+    return;
+set_connected:
+    peer_arm_timer(p, 1);
+    peer_set_state(p, PEER_STATE_CONNECTED);
+    peer_iface_init(p);
 }
 
 void peer_receive(struct peer *p, struct pkt *pkt)
 {
-    int rc;
     struct tun_pi *hdr = (struct tun_pi *)pkt->buff;
 
     if (pkt->pkt_size < sizeof (*hdr)) {
-        fprintf(stderr, "Received packet too small.\n");
+        PEER_LOG(p, "Packet too small.");
         return;
     }
 
     switch (ntohs(hdr->proto)) {
-        case ETH_P_IP:
-            if (p->state == PEER_CONNECTED)
-                peer_decrypt(p, pkt);
-            else {
-                PEER_LOG(p, "Protocol error: unitialized connection.");
-                goto reset;
-            }
-            break;
-
-        case RSA_HANDSHAKE_PROTO:
-        case PLAINTEXT_HANDSHAKE_PROTO:
-            switch (p->state) {
-                case PEER_CONN_RESET:
-                    peer_set_state(p, PEER_CONN_ACCEPT);
-                case PEER_CONN_ACCEPT:
-                    rc = handshake_accept(p, pkt);
-                    if (rc == -1)
-                        goto reset;
-                    if (rc == 1)
-                        goto connected;
-                    break;
-
-                case PEER_CONN_REQUEST:
-                    rc = handshake_request(p, pkt);
-                    if (rc == -1)
-                        goto reset;
-                    if (rc == 1)
-                        goto connected;
-                    break;
-
-                case PEER_CONNECTED:
-                    rc = handshake_connected(p, pkt);
-                    if (rc == -1)
-                        goto reset;
-                    break;
-
-                default:
-                    PEER_LOG(p, "Bad state: %d", p->state);
-            }
-        case KEEPALIVE_PROTO:
-            break;
-        default:
-            PEER_LOG (p, "Unrecognized Protocol ID 0x%04x", ntohs(hdr->proto));
+    case ETH_P_IP:
+        if (p->state == PEER_STATE_CONNECTED)
+            peer_rx(p, pkt);
+        else {
+            PEER_LOG(p, "Protocol error: Not connected.");
+        }
+        break;
+    case TUN_CTL_PROTO:
+        peer_ctl_rx(p, pkt);
+        break;
+    default:
+        PEER_LOG (p, "Unrecognized Protocol ID 0x%04x", ntohs(hdr->proto));
     }
 
     p->rx_count++;
 
     return;
-
-reset:
-    peer_arm_timer(p, 0);
-    handshake_reset(p);
-    peer_set_state(p, PEER_CONN_RESET);
-    return;
-connected:
-    peer_arm_timer(p, 1);
-    peer_set_state(p, PEER_CONNECTED);
-    peer_iface_init(p);
 }
 

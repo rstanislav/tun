@@ -78,6 +78,7 @@ static void rx_handler(struct pkt *p, struct sockaddr_in *src)
 
     if (!peer && listen_mode) {
         peer = peer_create(&evt_dispatch, src, socket_tx_schedule);
+        peer_listen(peer);
     }
 
     peer_receive(peer, p);
@@ -135,7 +136,7 @@ int io_dispatch(int sockfd, struct sockaddr_in *remote)
     struct pkt *p;
     int rc;
     int i;
-    struct peer *serv;
+    struct peer *serv = NULL;
 
     pktqueue_init(&rx_pool);
     pktqueue_init(&tx_queue);

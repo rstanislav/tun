@@ -91,6 +91,25 @@ static inline void pktqueue_init(struct pktqueue *pq)
     pq->pkt_mem = 0;
 }
 
+static inline void pkt_free(struct pkt *p)
+{
+    free(p->buff);
+    free(p);
+}
+
+static inline void pkt_complete_default(struct pkt *pkt, void *priv)
+{
+    (void)priv;
+    pkt_free(pkt);
+}
+
+static inline void pkt_set_compl(struct pkt *p, compl_handler_t h,
+                                 void *priv)
+{
+    p->compl.handler = h;
+    p->compl.priv = priv;
+}
+
 static inline struct pkt *pkt_alloc(size_t size)
 {
     struct pkt *p;
@@ -102,21 +121,9 @@ static inline struct pkt *pkt_alloc(size_t size)
     if (!p->buff)
         return NULL;
     p->buff_size = size;
+    pkt_set_compl(p, pkt_complete_default, NULL);
 
     return p;
-}
-
-static inline void pkt_free(struct pkt *p)
-{
-    free(p->buff);
-    free(p);
-}
-
-static inline void pkt_set_compl(struct pkt *p, compl_handler_t h,
-                                 void *priv)
-{
-    p->compl.handler = h;
-    p->compl.priv = priv;
 }
 
 static inline void pkt_complete(struct pkt *p)

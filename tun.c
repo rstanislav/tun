@@ -46,18 +46,16 @@
 #include <netinet/ip.h>
 #include <arpa/inet.h>
 
-#include "tun_crypto.h"
-
 static void usage(char *progname)
 {
     fprintf(stderr, "Usage:\n");
     fprintf(stderr, "    %s [OPTION] hostname port\n", progname);
     fprintf(stderr, "    %s -l [OPTION] port\n", progname);
     fprintf(stderr, "Options:\n");
+#if 0 /* FIXME */
     fprintf(stderr, "    -k <filename>          Path to the file containing the private RSA key to use\n"
                     "                           for securing communication with peer. If none is given,\n"
                     "                           communication will be sent in plain text.\n");
-#if 0 /* FIXME */
     fprintf(stderr, "    -a <digest list>       Comma separated list of SHA-1 public key digests that %s\n"
                     "                           will automatically accept when establishing a secure\n"
                     "                           channel with the remote host. If the remote host's public\n"
@@ -115,6 +113,7 @@ static int parse_opts(int argc, char **argv, struct sockaddr_in *addr, int *list
 
         if (!strcmp(argv[i], "-l")) {
             *listen = 1;
+#if 0 /* FIXME */
         } else if (!strcmp(argv[i], "-k")) {
             i++;
             if (crypto_load_key(argv[i])) {
@@ -122,7 +121,6 @@ static int parse_opts(int argc, char **argv, struct sockaddr_in *addr, int *list
                         strerror(errno));
                 goto printusage;
             }
-#if 0 /* FIXME */
         } else if (!strcmp(argv[i], "-a")) {
             i++;
             if (crypto_accept_list(argv[i])) {
@@ -200,8 +198,6 @@ int main(int argc, char **argv)
     sockfd = sock_alloc(listen, &addr);
     if (sockfd < 0)
         return -1;
-
-    crypto_init();
 
     rc = io_dispatch(sockfd, listen ? NULL : &addr);
 

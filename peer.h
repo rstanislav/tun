@@ -40,13 +40,15 @@
 #include <arpa/inet.h>
 
 #include "iface.h"
-#include "crypto.h"
 
-enum proto_id
+#define TUN_CTL_PROTO 0
+
+struct tun_ctl
 {
-    RSA_HANDSHAKE_PROTO = 0,
-    PLAINTEXT_HANDSHAKE_PROTO,
-    KEEPALIVE_PROTO,
+#define TUN_CTL_SYN 0x01
+#define TUN_CTL_ACK 0x02
+#define TUN_CTL_RST 0x04
+   __u8 ctl_flags;
 };
 
 #define PEER_LOG(_p, fmt, ...) \
@@ -57,23 +59,26 @@ enum proto_id
 
 enum peer_state
 {
-    PEER_CONN_RESET = 0,
-    PEER_CONN_REQUEST,
-    PEER_CONN_ACCEPT,
-    PEER_CONNECTED
+    PEER_STATE_INVALID = 0,
+    PEER_STATE_LISTENING,
+    PEER_STATE_CONNECTING,
+    PEER_STATE_CONNECTED,
+    PEER_STATE_CLOSED,
 };
 
 static inline const char *peer_state_str(enum peer_state state)
 {
     switch (state) {
-        case PEER_CONN_RESET:
-            return "PEER_CONN_RESET";
-        case PEER_CONN_REQUEST:
-            return "PEER_CONN_REQUEST";
-        case PEER_CONN_ACCEPT:
-            return "PEER_CONN_ACCEPT";
-        case PEER_CONNECTED:
-            return "PEER_CONNECTED";
+        case PEER_STATE_INVALID:
+            return "PEER_STATE_INVALID";
+        case PEER_STATE_LISTENING:
+            return "PEER_STATE_LISTENING";
+        case PEER_STATE_CONNECTING:
+            return "PEER_STATE_CONNECTING";
+        case PEER_STATE_CONNECTED:
+            return "PEER_STATE_CONNECTED";
+        case PEER_STATE_CLOSED:
+            return "PEER_STATE_CLOSED";
     }
 
     return 0;
@@ -87,8 +92,6 @@ struct peer
     struct sockaddr_in addr;
     struct iface *iface;
     struct dispatch *dispatch;
-    RSA *pubkey;
-    BF_KEY *key;
     struct event *timer;
     int tx_count;
     int rx_count;
@@ -103,6 +106,8 @@ struct peer *peer_create(struct dispatch *d, struct sockaddr_in *addr,
                          tx_handler_t tx);
 void peer_destroy(struct peer *p);
 void peer_connect(struct peer *p);
+void peer_listen(struct peer *p);
+
 void peer_receive(struct peer *p, struct pkt *pkt);
 
 static inline void peer_send(struct peer *p, struct pkt *pkt)
@@ -110,11 +115,5 @@ static inline void peer_send(struct peer *p, struct pkt *pkt)
     p->tx_count++;
     p->tx(pkt, &p->addr);
 }
-
-void handshake_init(struct peer *p);
-void handshake_reset(struct peer *p);
-int handshake_accept(struct peer *p, struct pkt *pkt);
-int handshake_request(struct peer *p, struct pkt *pkt);
-int handshake_connected(struct peer *p, struct pkt *pkt);
 
 #endif /* PEER_H_ */
